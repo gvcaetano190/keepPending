@@ -9,14 +9,14 @@
  * ============================================================================
  */
 
-namespace GlpiPlugin\KeepPending;
+namespace GlpiPlugin\Keeppending;
 
 class Config extends \CommonDBTM {
     
     public static $rightname = 'config';
     
     public static function getTypeName($nb = 0) {
-        return __('Configurações - KeepPending', 'keepPending');
+        return __('Configurações - Keeppending', 'keepPending');
     }
     
     /**
@@ -32,13 +32,13 @@ class Config extends \CommonDBTM {
             'enable_logs'         => true
         ];
         
-        if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
+        if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
             return $config;
         }
         
         $result = $DB->request([
             'SELECT' => '*',
-            'FROM'   => 'glpi_plugin_keepPending_config',
+            'FROM'   => 'glpi_plugin_keeppending_config',
             'LIMIT'  => 1
         ]);
         
@@ -62,7 +62,7 @@ class Config extends \CommonDBTM {
     public static function updateConfig($data) {
         global $DB;
         
-        if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
+        if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
             return false;
         }
         
@@ -72,7 +72,7 @@ class Config extends \CommonDBTM {
         ];
         
         return $DB->update(
-            'glpi_plugin_keepPending_config',
+            'glpi_plugin_keeppending_config',
             $update_data,
             ['id' => 1]
         );

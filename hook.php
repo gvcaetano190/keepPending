@@ -26,14 +26,14 @@
  * @param object $item Objeto Ticket que será atualizado
  * @return void
  */
-function plugin_keepPending_pre_item_update($item) {
+function plugin_keeppending_pre_item_update($item) {
     // Verificar se é um ticket (chamado)
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
     // Verificar se o plugin está habilitado
-    if (!plugin_keepPending_isEnabled()) {
+    if (!plugin_keeppending_isEnabled()) {
         return;
     }
     
@@ -68,7 +68,7 @@ function plugin_keepPending_pre_item_update($item) {
             
             // Detectar se é uma mudança MANUAL (direta do campo status)
             // ou se é uma mudança automática (via resposta, email, etc)
-            if (plugin_keepPending_isManualStatusChange($item)) {
+            if (plugin_keeppending_isManualStatusChange($item)) {
                 // É uma mudança MANUAL - PERMITIR (não faz nada)
                 return;
             } else {
@@ -76,7 +76,7 @@ function plugin_keepPending_pre_item_update($item) {
                 $item->input['status'] = $PENDING_STATUS;
                 
                 // Registrar a ação no log
-                plugin_keepPending_log(
+                plugin_keeppending_log(
                     $ticket_id,
                     'Mudança automática de status bloqueada',
                     sprintf(
@@ -98,12 +98,12 @@ function plugin_keepPending_pre_item_update($item) {
  * @param object $item Objeto Ticket que foi atualizado
  * @return void
  */
-function plugin_keepPending_item_update($item) {
+function plugin_keeppending_item_update($item) {
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
-    if (!plugin_keepPending_isEnabled()) {
+    if (!plugin_keeppending_isEnabled()) {
         return;
     }
 }
@@ -123,7 +123,7 @@ function plugin_keepPending_item_update($item) {
  * @param object $item Objeto Ticket
  * @return bool true se é mudança manual, false se é automática
  */
-function plugin_keepPending_isManualStatusChange($item) {
+function plugin_keeppending_isManualStatusChange($item) {
     // Verificar se há campos adicionais sendo alterados além do status
     // Se APENAS status está mudando, é provável que seja manual
     
@@ -176,16 +176,16 @@ function plugin_keepPending_isManualStatusChange($item) {
  * 
  * @return bool true se plugin está habilitado
  */
-function plugin_keepPending_isEnabled() {
+function plugin_keeppending_isEnabled() {
     global $DB;
     
-    if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
+    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
         return false;
     }
     
     $result = $DB->request([
         'SELECT' => ['enable_keep_pending'],
-        'FROM'   => 'glpi_plugin_keepPending_config',
+        'FROM'   => 'glpi_plugin_keeppending_config',
         'LIMIT'  => 1
     ]);
     
@@ -205,17 +205,17 @@ function plugin_keepPending_isEnabled() {
  * @param string $details Detalhes da ação
  * @return void
  */
-function plugin_keepPending_log($ticket_id, $action, $details = '') {
+function plugin_keeppending_log($ticket_id, $action, $details = '') {
     global $DB;
     
     // Verificar se logs estão habilitados
-    if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
+    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
         return;
     }
     
     $result = $DB->request([
         'SELECT' => ['enable_logs'],
-        'FROM'   => 'glpi_plugin_keepPending_config',
+        'FROM'   => 'glpi_plugin_keeppending_config',
         'LIMIT'  => 1
     ]);
     
