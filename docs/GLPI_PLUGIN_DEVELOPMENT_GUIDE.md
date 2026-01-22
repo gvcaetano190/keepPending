@@ -1,6 +1,6 @@
 # 📚 Guia Completo: Como Criar um Plugin GLPI Funcional
 
-> Este guia foi criado com base na documentação oficial do GLPI e em plugins funcionais como [behaviors](https://github.com/InfotelGLPI/behaviors).
+> Este guia foi criado com base na documentação oficial do GLPI, plugins funcionais como [behaviors](https://github.com/InfotelGLPI/behaviors), e lições aprendidas no desenvolvimento do plugin keepPending.
 
 ---
 
@@ -14,9 +14,11 @@
 6. [hook.php - Estrutura Completa](#-hookphp---estrutura-completa)
 7. [Página de Configuração](#-página-de-configuração)
 8. [Hooks Disponíveis](#-hooks-disponíveis)
-9. [Checklist Final](#-checklist-final)
-10. [Erros Comuns](#-erros-comuns)
-11. [Referências](#-referências)
+9. [Logging e Debug](#-logging-e-debug)
+10. [Status de Tickets GLPI](#-status-de-tickets-glpi)
+11. [Checklist Final](#-checklist-final)
+12. [Erros Comuns](#-erros-comuns)
+13. [Referências](#-referências)
 
 ---
 
@@ -130,23 +132,29 @@ function plugin_init_meuplugin() {
     $PLUGIN_HOOKS['config_page']['meuplugin'] = 'front/config.form.php';
     
     // ============================================
-    // Hooks de Items (opcional)
+    // Hooks de Items - IMPORTANTE: usar ARRAY com itemtype!
     // ============================================
     
-    // Antes de adicionar item
-    // $PLUGIN_HOOKS['pre_item_add']['meuplugin'] = 'plugin_meuplugin_pre_item_add';
+    // ⚠️ FORMATO CORRETO para GLPI 10:
+    // Deve ser array associativo: ['Itemtype' => 'nome_da_funcao']
     
-    // Depois de adicionar item
-    // $PLUGIN_HOOKS['item_add']['meuplugin'] = 'plugin_meuplugin_item_add';
-    
-    // Antes de atualizar item
-    $PLUGIN_HOOKS['pre_item_update']['meuplugin'] = 'plugin_meuplugin_pre_item_update';
+    // Antes de atualizar item (ex: Ticket)
+    $PLUGIN_HOOKS['pre_item_update']['meuplugin'] = [
+        'Ticket' => 'plugin_meuplugin_pre_item_update'
+    ];
     
     // Depois de atualizar item
-    $PLUGIN_HOOKS['item_update']['meuplugin'] = 'plugin_meuplugin_item_update';
+    $PLUGIN_HOOKS['item_update']['meuplugin'] = [
+        'Ticket' => 'plugin_meuplugin_item_update'
+    ];
     
-    // Antes de deletar item
-    // $PLUGIN_HOOKS['pre_item_delete']['meuplugin'] = 'plugin_meuplugin_pre_item_delete';
+    // Para múltiplos itemtypes:
+    // $PLUGIN_HOOKS['pre_item_update']['meuplugin'] = [
+    //     'Ticket'  => 'plugin_meuplugin_pre_item_update',
+    //     'Problem' => 'plugin_meuplugin_pre_item_update',
+    //     'Change'  => 'plugin_meuplugin_pre_item_update'
+    // ];
+}
     
     // Depois de deletar item
     // $PLUGIN_HOOKS['item_delete']['meuplugin'] = 'plugin_meuplugin_item_delete';
@@ -254,27 +262,146 @@ function plugin_meuplugin_uninstall() {
  * Hook pre_item_update - Executado ANTES de atualizar
  * 
  * Use $item->input para modificar dados antes de salvar
+ * 
+ * IMPORTANTE: O hook recebe o objeto $item diretamente
  */
 function plugin_meuplugin_pre_item_update($item) {
-    // Verificar tipo do item
+    // Verificar tipo do item (se não usou array no registro do hook)
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
-    // Sua lógica aqui...
-    // Exemplo: modificar input antes de salvar
-    // $item->input['campo'] = 'novo_valor';
+    // Obter ID do item
+    $item_id = $item->getID();
+    
+    // Obter dados do banco de dados (estado atual, antes da mudança)
+    global $DB;
+    $result = $DB->request([
+        'SELECT' => ['status'],
+        'FROM'   => 'glpi_tickets',
+        'WHERE'  => ['id' => $item_id]
+    ]);
+    
+    if ($result->count()) {
+        $current_data = $result->current();
+        $current_status = (int) $current_data['status'];
+        
+        // Verificar novo status que será aplicado
+        $new_status = isset($item->input['status']) ? (int) $item->input['status'] : $current_status;
+        
+        // Modificar input ANTES de salvar
+        // Exemplo: forçar status para Pendente
+        // $item->input['status'] = 4;
+    }
 }
 
 /**
  * Hook item_update - Executado DEPOIS de atualizar
+ * 
+ * Usado para logs, notificações, ações pós-salvamento
  */
 function plugin_meuplugin_item_update($item) {
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
-    // Sua lógica aqui (logs, notificações, etc)
+    // Registrar log
+    Toolbox::logInFile('meuplugin', "Ticket #{$item->getID()} foi atualizado\n");
+}
+```
+
+---
+
+## 🔍 Logging e Debug
+
+### Usando Toolbox::logInFile (RECOMENDADO)
+
+```php
+// Escreve em /var/www/html/glpi/files/_log/meuplugin.log
+Toolbox::logInFile('meuplugin', "Mensagem de log\n");
+
+// Com variáveis
+$ticket_id = 123;
+$status = 4;
+Toolbox::logInFile('meuplugin', "Ticket #$ticket_id alterado para status $status\n");
+```
+
+### Usando file_put_contents (para debug detalhado)
+
+```php
+$debug_file = GLPI_LOG_DIR . '/meuplugin_debug.log';
+$timestamp = date('Y-m-d H:i:s');
+
+file_put_contents($debug_file, "[$timestamp] Minha mensagem\n", FILE_APPEND);
+```
+
+### Visualizar logs em tempo real
+
+```bash
+# Ver últimas linhas
+sudo tail -50 /var/www/html/glpi/files/_log/meuplugin.log
+
+# Acompanhar em tempo real
+sudo tail -f /var/www/html/glpi/files/_log/meuplugin.log
+
+# Ver erros PHP do GLPI
+sudo tail -f /var/www/html/glpi/files/_log/php-errors.log
+```
+
+### ⚠️ NÃO use Event::log diretamente
+
+```php
+// ❌ EVITAR - pode causar erro "Class Event not found"
+Event::log(...);
+
+// ❌ EVITAR - namespace pode mudar entre versões
+\Glpi\Event::log(...);
+
+// ✅ USAR - simples e funciona em todas as versões
+Toolbox::logInFile('meuplugin', "mensagem\n");
+```
+
+---
+
+## 🎫 Status de Tickets GLPI
+
+### Constantes de Status (CommonITILObject)
+
+| Constante | Valor | Nome PT-BR |
+|-----------|-------|------------|
+| `INCOMING` | 1 | Novo |
+| `ASSIGNED` | 2 | Em atendimento (Processando) |
+| `PLANNED` | 3 | Planejado |
+| `WAITING` | 4 | **Pendente** |
+| `SOLVED` | 5 | **Solucionado** |
+| `CLOSED` | 6 | Fechado |
+
+### Exemplo: Verificar e modificar status
+
+```php
+function plugin_meuplugin_pre_item_update($item) {
+    // Constantes de status
+    $PENDING_STATUS = 4;  // Pendente
+    $SOLVED_STATUS = 5;   // Solucionado
+    $ASSIGNED_STATUS = 2; // Em atendimento
+    
+    // Obter status atual do banco
+    global $DB;
+    $result = $DB->request([
+        'SELECT' => ['status'],
+        'FROM'   => 'glpi_tickets',
+        'WHERE'  => ['id' => $item->getID()]
+    ]);
+    
+    $current = $result->current();
+    $current_status = (int) $current['status'];
+    $new_status = (int) ($item->input['status'] ?? $current_status);
+    
+    // Exemplo: Se está Solucionado e tentando ir para Em Atendimento
+    // redirecionar para Pendente
+    if ($current_status === $SOLVED_STATUS && $new_status === $ASSIGNED_STATUS) {
+        $item->input['status'] = $PENDING_STATUS;
+    }
 }
 ```
 
@@ -356,12 +483,14 @@ Antes de publicar seu plugin, verifique:
 - [ ] `$PLUGIN_HOOKS['csrf_compliant']['nome'] = true;`
 - [ ] `$PLUGIN_HOOKS['config_page']['nome'] = '...';`
 - [ ] Array `requirements` (não `minGlpiVersion`)
+- [ ] Hooks de item usam **array com itemtype**: `['Ticket' => 'funcao']`
 
 ### hook.php
 
 - [ ] `plugin_NOME_install()` retorna `true`
 - [ ] `plugin_NOME_uninstall()` retorna `true`
 - [ ] Funções de hooks implementadas
+- [ ] Usa `Toolbox::logInFile()` para logs (não `Event::log`)
 
 ### Geral
 
@@ -424,18 +553,95 @@ $PLUGIN_HOOKS['csrf_compliant']['meuplugin'] = true;
 ]
 ```
 
-### 5. Hooks não funcionam
+### 5. Hook não é chamado
 
-**Causa**: Nome do plugin diferente nos hooks
+**Causa**: Hook registrado como string em vez de array
 
 ```php
-// ❌ ERRADO - nomes diferentes
-$PLUGIN_HOOKS['pre_item_update']['MeuPlugin'] = '...';
-$PLUGIN_HOOKS['item_update']['meuplugin'] = '...';
+// ❌ ERRADO - hook pode não ser chamado no GLPI 10
+$PLUGIN_HOOKS['pre_item_update']['meuplugin'] = 'plugin_meuplugin_pre_item_update';
 
-// ✅ CORRETO - mesmo nome em todos
-$PLUGIN_HOOKS['pre_item_update']['meuplugin'] = '...';
-$PLUGIN_HOOKS['item_update']['meuplugin'] = '...';
+// ✅ CORRETO - usar array com itemtype
+$PLUGIN_HOOKS['pre_item_update']['meuplugin'] = [
+    'Ticket' => 'plugin_meuplugin_pre_item_update'
+];
+```
+
+### 6. Erro "Class Event not found"
+
+**Causa**: Usando Event::log que requer namespace
+
+```php
+// ❌ ERRADO - pode causar erro
+Event::log(...);
+\Glpi\Event::log(...);
+
+// ✅ CORRETO - usar Toolbox
+Toolbox::logInFile('meuplugin', "mensagem\n");
+```
+
+### 7. Erro de SQL / Query
+
+**Causa**: Formato incorreto de query
+
+```php
+// ❌ ERRADO - formato antigo
+$result = $DB->query("SELECT * FROM glpi_tickets WHERE id = $id");
+
+// ✅ CORRETO - usar $DB->request()
+$result = $DB->request([
+    'SELECT' => ['status', 'name'],
+    'FROM'   => 'glpi_tickets',
+    'WHERE'  => ['id' => $id]
+]);
+
+if ($result->count()) {
+    $data = $result->current();
+    $status = $data['status'];
+}
+```
+
+### 8. Tela branca ao acessar plugin
+
+**Causa**: Erro PHP não tratado
+
+**Solução**: Verificar logs
+
+```bash
+sudo tail -50 /var/www/html/glpi/files/_log/php-errors.log
+```
+
+---
+
+## 🔄 Detectar Mudança Manual vs Automática
+
+Para diferenciar se uma mudança foi feita manualmente pelo usuário ou automaticamente (resposta por email, etc):
+
+```php
+function plugin_meuplugin_isManualStatusChange($item) {
+    global $DB;
+    
+    $ticket_id = $item->getID();
+    $time_limit = date('Y-m-d H:i:s', strtotime('-30 seconds'));
+    
+    // Verificar se há followup recente (indica mudança automática)
+    $recent_followup = $DB->request([
+        'SELECT' => ['id', 'date_creation'],
+        'FROM'   => 'glpi_itilfollowups',
+        'WHERE'  => [
+            'itemtype'      => 'Ticket',
+            'items_id'      => $ticket_id,
+            'date_creation' => ['>', $time_limit]
+        ],
+        'LIMIT'  => 1
+    ]);
+    
+    if ($recent_followup->count() > 0) {
+        return false; // Mudança automática (há followup recente)
+    }
+    
+    return true; // Mudança manual
+}
 ```
 
 ---
@@ -446,6 +652,7 @@ $PLUGIN_HOOKS['item_update']['meuplugin'] = '...';
 - [Requirements (setup.php/hook.php)](https://glpi-developer-documentation.readthedocs.io/en/master/plugins/requirements.html)
 - [Plugin Example (oficial)](https://github.com/pluginsGLPI/example)
 - [Plugin Behaviors (referência)](https://github.com/InfotelGLPI/behaviors)
+- [Plugin keepPending (exemplo funcional)](https://github.com/gvcaetano190/keepPending)
 
 ---
 
@@ -455,20 +662,35 @@ Para criar um novo plugin rapidamente:
 
 ```bash
 # 1. Criar estrutura
-mkdir -p meuplugin/{front,inc,locales}
+mkdir -p meuplugin/{front,inc,locales,docs}
 
 # 2. Criar arquivos obrigatórios
 touch meuplugin/setup.php
 touch meuplugin/hook.php
 touch meuplugin/front/config.form.php
+touch meuplugin/README.md
+touch meuplugin/CHANGELOG.md
 
 # 3. Copiar conteúdo deste guia para os arquivos
 # 4. Renomear "meuplugin" para o nome do seu plugin
 # 5. Testar no GLPI
 ```
 
+### Script de Deploy para Servidor
+
+```bash
+# Atualizar plugin no servidor GLPI
+cd /var/www/html/glpi/plugins && \
+sudo rm -rf meuplugin && \
+sudo wget https://github.com/USUARIO/meuplugin/archive/refs/heads/main.tar.gz -O meuplugin.tar.gz && \
+sudo tar -xzf meuplugin.tar.gz && \
+sudo mv meuplugin-main meuplugin && \
+sudo rm meuplugin.tar.gz && \
+sudo chown -R www-data:www-data meuplugin
+```
+
 ---
 
 **Autor**: Gabriel Caetano  
-**Baseado em**: Documentação oficial GLPI + Plugin Behaviors  
+**Baseado em**: Documentação oficial GLPI + Plugin Behaviors + Desenvolvimento keepPending  
 **Última atualização**: Janeiro 2026
