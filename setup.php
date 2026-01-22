@@ -8,8 +8,8 @@
  * adicionadas, evitando que tickets passem automaticamente para outro status.
  * 
  * @license     GPL v2 ou superior
- * @link        https://github.com/seu-usuario/glpi-keep-pending-status
- * @author      Seu Nome
+ * @link        https://github.com/gvcaetano190/keepPending
+ * @author      Gabriel Caetano
  * @version     1.0.0
  * ============================================================================
  */
@@ -68,9 +68,9 @@ function plugin_keepPending_getVersion() {
     return [
         'name'           => 'KeepPending',
         'version'        => '1.0.0',
-        'author'         => 'Seu Nome',
+        'author'         => 'Gabriel Caetano',
         'license'        => 'GPL-2.0',
-        'homepage'       => 'https://github.com/seu-usuario/glpi-keep-pending-status',
+        'homepage'       => 'https://github.com/gvcaetano190/keepPending',
         'description'    => __('Mantém o status Pendente em chamados quando respostas são adicionadas', 'keepPending'),
         'minGlpiVersion' => '10.0.0',
         'maxGlpiVersion' => '10.9.9',
