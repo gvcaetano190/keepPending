@@ -331,16 +331,12 @@ function plugin_keeppending_log($ticket_id, $action, $details = '') {
         return;
     }
     
-    // Registrar no log de eventos do GLPI (usar namespace completo)
-    \Glpi\Event::log(
+    // Usar Toolbox::logInFile ao invés de Event::log (mais simples e compatível)
+    $message = sprintf(
+        'Ticket #%d - %s%s',
         $ticket_id,
-        'Ticket',
-        4, // type log (modificação)
-        'keepPending',
-        sprintf(
-            '%s: %s %s',
-            $action,
-            $details ? '- ' . $details : ''
-        )
+        $action,
+        $details ? ' - ' . $details : ''
     );
+    Toolbox::logInFile('keeppending', $message . "\n");
 }
