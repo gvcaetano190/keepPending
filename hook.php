@@ -265,10 +265,6 @@ function plugin_keeppending_isManualStatusChange($item) {
 
 /**
  * Verifica se o plugin está habilitado
-}
-
-/**
- * Verifica se o plugin está habilitado
  * 
  * @return bool true se plugin está habilitado
  */
