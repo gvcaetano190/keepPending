@@ -27,6 +27,7 @@ function plugin_keeppending_install() {
         $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
             `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
             `enable_keep_pending` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status pendente',
+            `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado',
             `enable_logs` tinyint(1) DEFAULT 1 COMMENT 'Habilitar logs',
             `created_at` datetime DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -37,8 +38,15 @@ function plugin_keeppending_install() {
         if ($DB->tableExists('glpi_plugin_keeppending_config')) {
             $DB->insert('glpi_plugin_keeppending_config', [
                 'enable_keep_pending' => 1,
+                'enable_keep_solved'  => 1,
                 'enable_logs'         => 1
             ]);
+        }
+    } else {
+        // Adicionar coluna enable_keep_solved se não existir (para upgrades)
+        if (!$DB->fieldExists('glpi_plugin_keeppending_config', 'enable_keep_solved')) {
+            $DB->query("ALTER TABLE `glpi_plugin_keeppending_config` ADD `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado' AFTER `enable_keep_pending`");
+            $DB->update('glpi_plugin_keeppending_config', ['enable_keep_solved' => 1], [1]);
         }
     }
     
@@ -122,27 +130,32 @@ function plugin_keeppending_pre_item_update($item) {
     $current_data = $result->current();
     $current_status = (int) $current_data['status'];
     
-    // Status de Pendente em GLPI = 4 (CommonITILObject::WAITING)
-    // INCOMING=1, ASSIGNED=2, PLANNED=3, WAITING=4, SOLVED=5, CLOSED=6
-    $PENDING_STATUS = 4;
+    // Status em GLPI: INCOMING=1, ASSIGNED=2, PLANNED=3, WAITING=4, SOLVED=5, CLOSED=6
+    $PENDING_STATUS = 4;  // Pendente
+    $SOLVED_STATUS = 5;   // Solucionado
     
-    file_put_contents($debug_file, "[$timestamp] Status atual no BD: $current_status (Pendente=4)\n", FILE_APPEND);
+    // Verificar quais status proteger baseado na configuração
+    $protected_statuses = plugin_keeppending_getProtectedStatuses();
+    
+    file_put_contents($debug_file, "[$timestamp] Status atual no BD: $current_status (Pendente=4, Solucionado=5)\n", FILE_APPEND);
+    file_put_contents($debug_file, "[$timestamp] Status protegidos: " . implode(', ', $protected_statuses) . "\n", FILE_APPEND);
     
     // Log do input recebido
     $input_status = isset($item->input['status']) ? $item->input['status'] : 'não definido';
     file_put_contents($debug_file, "[$timestamp] Status no input: $input_status\n", FILE_APPEND);
     file_put_contents($debug_file, "[$timestamp] Campos no input: " . implode(', ', array_keys($item->input)) . "\n", FILE_APPEND);
     
-    // Se o ticket está atualmente em status "Pendente" (status = 4)
-    if ($current_status === $PENDING_STATUS) {
-        file_put_contents($debug_file, "[$timestamp] ✓ Ticket está em PENDENTE\n", FILE_APPEND);
+    // Se o ticket está em um dos status protegidos (Pendente ou Solucionado)
+    if (in_array($current_status, $protected_statuses)) {
+        $status_name = ($current_status === $PENDING_STATUS) ? 'PENDENTE' : 'SOLUCIONADO';
+        file_put_contents($debug_file, "[$timestamp] ✓ Ticket está em $status_name\n", FILE_APPEND);
         
         // Verificar se o status está sendo alterado
         $new_status = isset($item->input['status']) ? (int) $item->input['status'] : $current_status;
         
         file_put_contents($debug_file, "[$timestamp] Novo status solicitado: $new_status\n", FILE_APPEND);
         
-        if ($new_status !== $PENDING_STATUS) {
+        if ($new_status !== $current_status) {
             file_put_contents($debug_file, "[$timestamp] ⚠ Tentativa de mudar status de $current_status para $new_status\n", FILE_APPEND);
             
             // Detectar se é uma mudança MANUAL (direta do campo status)
@@ -161,15 +174,16 @@ function plugin_keeppending_pre_item_update($item) {
                 return;
             } else {
                 // É uma mudança AUTOMÁTICA (resposta, email) - BLOQUEAR
-                file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status 4\n", FILE_APPEND);
-                $item->input['status'] = $PENDING_STATUS;
+                file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status $current_status\n", FILE_APPEND);
+                $item->input['status'] = $current_status;
                 
                 // Registrar a ação no log
                 plugin_keeppending_log(
                     $ticket_id,
                     'Mudança automática de status BLOQUEADA',
                     sprintf(
-                        'Interação detectada. Status mantido em Pendente: %d → %d (bloqueado)',
+                        'Interação detectada. Status mantido em %s: %d → %d (bloqueado)',
+                        $status_name,
                         $current_status,
                         $new_status
                     )
@@ -179,7 +193,7 @@ function plugin_keeppending_pre_item_update($item) {
             file_put_contents($debug_file, "[$timestamp] Status não está mudando - nada a fazer\n", FILE_APPEND);
         }
     } else {
-        file_put_contents($debug_file, "[$timestamp] Ticket NÃO está em Pendente (status=$current_status) - ignorando\n", FILE_APPEND);
+        file_put_contents($debug_file, "[$timestamp] Ticket NÃO está em status protegido (status=$current_status) - ignorando\n", FILE_APPEND);
     }
 }
 
@@ -275,29 +289,55 @@ function plugin_keeppending_isManualStatusChange($item) {
 }
 
 /**
- * Verifica se o plugin está habilitado
+ * Retorna lista de status protegidos pelo plugin
  * 
- * @return bool true se plugin está habilitado
+ * @return array Lista de status IDs que devem ser protegidos
  */
-function plugin_keeppending_isEnabled() {
+function plugin_keeppending_getProtectedStatuses() {
     global $DB;
     
+    $protected = [];
+    
+    // Status: WAITING=4 (Pendente), SOLVED=5 (Solucionado)
+    $PENDING_STATUS = 4;
+    $SOLVED_STATUS = 5;
+    
     if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
-        return false;
+        // Padrão: proteger ambos
+        return [$PENDING_STATUS, $SOLVED_STATUS];
     }
     
     $result = $DB->request([
-        'SELECT' => ['enable_keep_pending'],
+        'SELECT' => ['enable_keep_pending', 'enable_keep_solved'],
         'FROM'   => 'glpi_plugin_keeppending_config',
         'LIMIT'  => 1
     ]);
     
     if (!$result->count()) {
-        return true; // Habilitado por padrão
+        return [$PENDING_STATUS, $SOLVED_STATUS];
     }
     
     $config = $result->current();
-    return (bool) $config['enable_keep_pending'];
+    
+    if ((bool) ($config['enable_keep_pending'] ?? true)) {
+        $protected[] = $PENDING_STATUS;
+    }
+    
+    if ((bool) ($config['enable_keep_solved'] ?? true)) {
+        $protected[] = $SOLVED_STATUS;
+    }
+    
+    return $protected;
+}
+
+/**
+ * Verifica se o plugin está habilitado (pelo menos um status protegido)
+ * 
+ * @return bool true se plugin está habilitado
+ */
+function plugin_keeppending_isEnabled() {
+    $protected = plugin_keeppending_getProtectedStatuses();
+    return count($protected) > 0;
 }
 
 /**

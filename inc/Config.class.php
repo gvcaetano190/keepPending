@@ -29,6 +29,7 @@ class Config extends \CommonDBTM {
         
         $config = [
             'enable_keep_pending' => true,
+            'enable_keep_solved'  => true,
             'enable_logs'         => true
         ];
         
@@ -46,6 +47,7 @@ class Config extends \CommonDBTM {
             $data = $result->current();
             return [
                 'enable_keep_pending' => (bool) $data['enable_keep_pending'],
+                'enable_keep_solved'  => (bool) ($data['enable_keep_solved'] ?? true),
                 'enable_logs'         => (bool) $data['enable_logs']
             ];
         }
@@ -68,6 +70,7 @@ class Config extends \CommonDBTM {
         
         $update_data = [
             'enable_keep_pending' => isset($data['enable_keep_pending']) ? 1 : 0,
+            'enable_keep_solved'  => isset($data['enable_keep_solved']) ? 1 : 0,
             'enable_logs'         => isset($data['enable_logs']) ? 1 : 0
         ];
         
@@ -79,15 +82,22 @@ class Config extends \CommonDBTM {
     }
     
     /**
-     * Retorna informações sobre o status de pendência
+     * Retorna informações sobre os status protegidos
      * 
-     * @return array Informações sobre status pendente
+     * @return array Informações sobre status protegidos
      */
-    public static function getPendingStatusInfo() {
+    public static function getProtectedStatusInfo() {
         return [
-            'status_id'   => 5,
-            'status_name' => 'pending',
-            'description' => __('Status Pendente - Aguardando ação do usuário', 'keepPending')
+            'pending' => [
+                'status_id'   => 4,
+                'status_name' => 'pending',
+                'description' => __('Status Pendente - Aguardando resposta do solicitante', 'keepPending')
+            ],
+            'solved' => [
+                'status_id'   => 5,
+                'status_name' => 'solved',
+                'description' => __('Status Solucionado - Aguardando confirmação do solicitante', 'keepPending')
+            ]
         ];
     }
 }
