@@ -331,8 +331,8 @@ function plugin_keeppending_log($ticket_id, $action, $details = '') {
         return;
     }
     
-    // Registrar no log de eventos do GLPI
-    Event::log(
+    // Registrar no log de eventos do GLPI (usar namespace completo)
+    \Glpi\Event::log(
         $ticket_id,
         'Ticket',
         4, // type log (modificação)
