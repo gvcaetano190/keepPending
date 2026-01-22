@@ -1,0 +1,36 @@
+# Portuguese Brazilian translation
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pt_BR\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Keep Pending Status"
+msgstr "KeepPending"
+
+msgid "Maintains the Pending status on tickets when responses are added, preventing tickets from automatically moving to another status"
+msgstr "Mantém o status Pendente em chamados quando respostas são adicionadas, evitando que tickets passem automaticamente para outro status"
+
+msgid "Configurações - Keep Pending Status"
+msgstr "Configurações - KeepPending"
+
+msgid "Status Pending - Awaiting user action"
+msgstr "Status Pendente - Aguardando ação do usuário"
+
+msgid "Enable Keep Pending"
+msgstr "Habilitar KeepPending"
+
+msgid "Enable Logs"
+msgstr "Habilitar Logs"
+
+msgid "Status changed prevented"
+msgstr "Alteração de status prevenida"
+
+msgid "Pending status maintained. Change blocked: %s → %s"
+msgstr "Status pendente mantido. Alteração bloqueada: %s → %s"
+
+msgid "Attempt to change status blocked"
+msgstr "Tentativa de alterar status bloqueada"
+
+msgid "Plugin for GLPI to keep the Pending status on tickets"
+msgstr "Plugin para GLPI para manter o status Pendente em chamados"

@@ -1,0 +1,46 @@
+{
+  "name": "seu-usuario/glpi-keep-pending-status",
+  "description": "Plugin para manter o status Pendente em chamados do GLPI",
+  "type": "glpi-plugin",
+  "keywords": [
+    "glpi",
+    "plugin",
+    "tickets",
+    "status",
+    "pending",
+    "pendente"
+  ],
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Seu Nome",
+      "email": "seu-email@example.com",
+      "role": "developer"
+    }
+  ],
+  "homepage": "https://github.com/seu-usuario/glpi-keep-pending-status",
+  "support": {
+    "issues": "https://github.com/seu-usuario/glpi-keep-pending-status/issues",
+    "source": "https://github.com/seu-usuario/glpi-keep-pending-status"
+  },
+  "require": {
+    "php": ">=8.0",
+    "glpi-project/glpi": ">=10.0.0,<11.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "GlpiPlugin\\KeepPending\\": "inc/"
+    }
+  },
+  "extra": {
+    "glpi": {
+      "plugins_dir": ".",
+      "version": "1.0.0",
+      "min_glpi_version": "10.0.0"
+    }
+  }
+}
+
