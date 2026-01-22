@@ -107,20 +107,27 @@ function plugin_keeppending_pre_item_update($item) {
     }
     
     $current_data = $result->current();
-    $current_status = $current_data['status'];
+    $current_status = (int) $current_data['status'];
     
-    // Status de Pendente em GLPI = 5
-    $PENDING_STATUS = 5;
+    // Status de Pendente em GLPI = 4 (CommonITILObject::WAITING)
+    // INCOMING=1, ASSIGNED=2, PLANNED=3, WAITING=4, SOLVED=5, CLOSED=6
+    $PENDING_STATUS = 4;
     
-    // Se o ticket está atualmente em status "Pendente" (status = 5)
-    if ($current_status == $PENDING_STATUS) {
+    // Se o ticket está atualmente em status "Pendente" (status = 4)
+    if ($current_status === $PENDING_STATUS) {
         // Verificar se o status está sendo alterado
-        if (isset($item->input['status']) && $item->input['status'] != $PENDING_STATUS) {
-            
+        $new_status = isset($item->input['status']) ? (int) $item->input['status'] : $current_status;
+        
+        if ($new_status !== $PENDING_STATUS) {
             // Detectar se é uma mudança MANUAL (direta do campo status)
             // ou se é uma mudança automática (via resposta, email, etc)
             if (plugin_keeppending_isManualStatusChange($item)) {
                 // É uma mudança MANUAL - PERMITIR (não faz nada)
+                plugin_keeppending_log(
+                    $ticket_id,
+                    'Mudança MANUAL de status permitida',
+                    sprintf('Status alterado manualmente: %d → %d', $current_status, $new_status)
+                );
                 return;
             } else {
                 // É uma mudança AUTOMÁTICA (resposta, email) - BLOQUEAR
@@ -129,11 +136,11 @@ function plugin_keeppending_pre_item_update($item) {
                 // Registrar a ação no log
                 plugin_keeppending_log(
                     $ticket_id,
-                    'Mudança automática de status bloqueada',
+                    'Mudança automática de status BLOQUEADA',
                     sprintf(
-                        'Interação detectada. Status mantido em Pendente: %s → %s',
+                        'Interação detectada. Status mantido em Pendente: %d → %d (bloqueado)',
                         $current_status,
-                        $_POST['status'] ?? 'desconhecido'
+                        $new_status
                     )
                 );
             }
@@ -165,61 +172,63 @@ function plugin_keeppending_item_update($item) {
  * 
  * Mudanças MANUAIS: 
  * - Usuário vai em "Editar Ticket" e muda o status diretamente
- * - APENAS o campo status é alterado
+ * - APENAS campos de metadados são alterados (status, urgency, etc)
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Respostas, emails, automações que alteram status
- * - Múltiplos campos são alterados (content, followups, etc)
+ * - Respostas, emails, automações que alteram status junto com conteúdo
+ * - Quando um followup/resposta é adicionado junto com mudança de status
  * 
  * @param object $item Objeto Ticket
  * @return bool true se é mudança manual, false se é automática
  */
 function plugin_keeppending_isManualStatusChange($item) {
-    // Verificar se há campos adicionais sendo alterados além do status
-    // Se APENAS status está mudando, é provável que seja manual
-    
     $input = $item->input;
-    $manual_fields = ['status']; // Campo direto de mudança manual
     
-    // Campos relacionados a respostas automáticas/interações
-    $auto_fields = [
-        'content',          // Resposta/comentário
-        'solutions_id',     // Solução registrada
-        'actiontime',       // Tempo de ação registrado
-        'followups',        // Seguimentos
-        'date_mod',         // Data de modificação automática
-        'users_id_lastupdater', // Quem atualizou por último
+    // Campos que indicam uma INTERAÇÃO/RESPOSTA (automática)
+    // Se algum destes estiver presente, é uma mudança automática
+    $interaction_fields = [
+        '_itil_followup',       // Seguimento adicionado
+        'content',              // Conteúdo de resposta
+        '_content',             // Conteúdo alternativo
+        'solution',             // Solução
+        '_solution',            // Solução alternativa
+        '_tasktemplates_id',    // Template de tarefa
+        '_task',                // Tarefa
+        '_validation',          // Validação
+        'pending',              // Marcação de pendente via interface
+        '_pending',             // Pendente alternativo
     ];
     
-    // Verificar se há mudanças além de status (indica automação)
-    $has_auto_changes = false;
-    foreach ($auto_fields as $field) {
-        if (isset($input[$field]) && $input[$field] != '') {
-            $has_auto_changes = true;
-            break;
+    // Verificar $_POST também, pois algumas interações vêm de lá
+    $post_interaction_fields = [
+        'content',
+        'add_followup',
+        'add_task',
+        'add_solution',
+    ];
+    
+    // Verificar se há campos de interação no input
+    foreach ($interaction_fields as $field) {
+        if (isset($input[$field]) && !empty($input[$field])) {
+            // Há uma interação - é automático
+            return false;
         }
     }
     
-    // Se há mudanças de conteúdo/resposta, é automático
-    if ($has_auto_changes) {
-        return false; // Não é manual, é automático
+    // Verificar POST
+    foreach ($post_interaction_fields as $field) {
+        if (isset($_POST[$field]) && !empty($_POST[$field])) {
+            return false;
+        }
     }
     
-    // Se APENAS status mudou, é manual
-    $changed_fields = array_keys($input);
-    if (count($changed_fields) === 1 && in_array('status', $changed_fields)) {
-        return true; // É manual - apenas status foi alterado
+    // Verificar se há arrays de followups sendo adicionados
+    if (isset($input['_itil_followup']) || isset($input['ITILFollowup'])) {
+        return false;
     }
     
-    // Se apenas status e alguns metadados mudaram, é manual
-    $safe_fields = ['date_mod', '_job', '_no_history'];
-    $other_fields = array_diff($changed_fields, ['status'], $safe_fields);
-    if (empty($other_fields)) {
-        return true; // É manual
-    }
-    
-    // Caso padrão: considerar automático para permitir respostas
-    return false;
+    // Se chegou aqui, é uma mudança manual
+    return true;
 }
 
 /**
