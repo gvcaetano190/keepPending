@@ -31,10 +31,15 @@ function plugin_init_keeppending() {
     $PLUGIN_HOOKS['config_page']['keeppending'] = 'front/config.form.php';
     
     // Hook para interceptar atualização de tickets (PRE - antes de salvar)
-    $PLUGIN_HOOKS['pre_item_update']['keeppending'] = 'plugin_keeppending_pre_item_update';
+    // IMPORTANTE: Deve ser um array com o tipo de item como chave
+    $PLUGIN_HOOKS['pre_item_update']['keeppending'] = [
+        'Ticket' => 'plugin_keeppending_pre_item_update'
+    ];
     
     // Hook para registrar logs (POST - depois de salvar)
-    $PLUGIN_HOOKS['item_update']['keeppending'] = 'plugin_keeppending_item_update';
+    $PLUGIN_HOOKS['item_update']['keeppending'] = [
+        'Ticket' => 'plugin_keeppending_item_update'
+    ];
 }
 
 /**
