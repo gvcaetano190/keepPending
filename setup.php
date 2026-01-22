@@ -14,72 +14,70 @@
  * ============================================================================
  */
 
-// Incluir o init se necessário
-if (file_exists(__DIR__ . '/init.php') && basename(dirname(__FILE__)) === 'keeppending') {
-    include_once __DIR__ . '/init.php';
+define('PLUGIN_KEEPPENDING_VERSION', '1.0.0');
+
+/**
+ * Init the hooks of the plugins - Needed
+ * 
+ * @return void
+ */
+function plugin_init_keeppending() {
+    global $PLUGIN_HOOKS;
+    
+    // CSRF compliance - OBRIGATÓRIO para GLPI 10+
+    $PLUGIN_HOOKS['csrf_compliant']['keeppending'] = true;
+    
+    // Hook para interceptar atualização de tickets (PRE - antes de salvar)
+    $PLUGIN_HOOKS['pre_item_update']['keeppending'] = 'plugin_keeppending_pre_item_update';
+    
+    // Hook para registrar logs (POST - depois de salvar)
+    $PLUGIN_HOOKS['item_update']['keeppending'] = 'plugin_keeppending_item_update';
 }
 
 /**
- * Função de instalação do plugin
+ * Get the name and the version of the plugin - Needed
  * 
- * @return bool true se instalado com sucesso
+ * @return array
  */
-function plugin_keeppending_install() {
-    global $DB;
-    
-    // Criar tabela de configuração do plugin
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
-        $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
-            `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            `enable_keep_pending` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status pendente',
-            `enable_logs` tinyint(1) DEFAULT 1 COMMENT 'Habilitar logs',
-            `created_at` datetime DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        
-        if ($DB->query($query)) {
-            // Inserir configurações padrão
-            $DB->insert('glpi_plugin_keeppending_config', [
-                'enable_keep_pending' => 1,
-                'enable_logs'         => 1
-            ]);
-        }
-    }
-    
-    return true;
-}
-
-/**
- * Função de desinstalação do plugin
- * 
- * @return bool true se desinstalado com sucesso
- */
-function plugin_keeppending_uninstall() {
-    global $DB;
-    
-    // Remover tabela de configuração
-    if ($DB->tableExists('glpi_plugin_keeppending_config')) {
-        $DB->query("DROP TABLE `glpi_plugin_keeppending_config`");
-    }
-    
-    return true;
-}
-
-/**
- * Função que retorna informações da versão do plugin
- * 
- * @return array Informações do plugin
- */
-function plugin_keeppending_getVersion() {
+function plugin_version_keeppending() {
     return [
         'name'           => 'KeepPending',
-        'version'        => '1.0.0',
+        'version'        => PLUGIN_KEEPPENDING_VERSION,
         'author'         => 'Gabriel Caetano',
-        'license'        => 'GPL-2.0',
+        'license'        => 'GPLv2+',
         'homepage'       => 'https://github.com/gvcaetano190/keepPending',
-        'description'    => __('Mantém o status Pendente em chamados quando respostas são adicionadas', 'keeppending'),
-        'minGlpiVersion' => '10.0.0',
-        'maxGlpiVersion' => '10.9.9',
+        'requirements'   => [
+            'glpi' => [
+                'min' => '10.0.0',
+                'max' => '10.9.99',
+            ],
+            'php' => [
+                'min' => '8.0',
+            ]
+        ]
     ];
 }
 
+/**
+ * Optional: check prerequisites before install
+ * 
+ * @return boolean
+ */
+function plugin_keeppending_check_prerequisites() {
+    // Verificar versão mínima do GLPI
+    if (version_compare(GLPI_VERSION, '10.0.0', 'lt')) {
+        echo "Este plugin requer GLPI >= 10.0.0";
+        return false;
+    }
+    return true;
+}
 
+/**
+ * Check configuration process for plugin
+ * 
+ * @param boolean $verbose Enable verbosity
+ * @return boolean
+ */
+function plugin_keeppending_check_config($verbose = false) {
+    return true;
+}

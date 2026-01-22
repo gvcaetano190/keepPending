@@ -7,8 +7,59 @@
  * Este arquivo contém os hooks principais do plugin que interceptam
  * as operações de atualização de tickets
  * 
+ * @license     GPL v2 ou superior
+ * @link        https://github.com/gvcaetano190/keepPending
+ * @author      Gabriel Caetano
+ * @version     1.0.0
  * ============================================================================
  */
+
+/**
+ * Install hook - Função de instalação do plugin
+ * 
+ * @return boolean
+ */
+function plugin_keeppending_install() {
+    global $DB;
+    
+    // Criar tabela de configuração do plugin
+    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
+        $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
+            `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `enable_keep_pending` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status pendente',
+            `enable_logs` tinyint(1) DEFAULT 1 COMMENT 'Habilitar logs',
+            `created_at` datetime DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        
+        $DB->query($query);
+        
+        // Inserir configurações padrão
+        if ($DB->tableExists('glpi_plugin_keeppending_config')) {
+            $DB->insert('glpi_plugin_keeppending_config', [
+                'enable_keep_pending' => 1,
+                'enable_logs'         => 1
+            ]);
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Uninstall hook - Função de desinstalação do plugin
+ * 
+ * @return boolean
+ */
+function plugin_keeppending_uninstall() {
+    global $DB;
+    
+    // Remover tabela de configuração
+    if ($DB->tableExists('glpi_plugin_keeppending_config')) {
+        $DB->query("DROP TABLE `glpi_plugin_keeppending_config`");
+    }
+    
+    return true;
+}
 
 /**
  * Hook PRÉ-ATUALIZAÇÃO: Intercepta antes de salvar mudanças no banco de dados
