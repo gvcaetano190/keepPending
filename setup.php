@@ -27,6 +27,9 @@ function plugin_init_keeppending() {
     // CSRF compliance - OBRIGATÓRIO para GLPI 10+
     $PLUGIN_HOOKS['csrf_compliant']['keeppending'] = true;
     
+    // Página de configuração do plugin
+    $PLUGIN_HOOKS['config_page']['keeppending'] = 'front/config.form.php';
+    
     // Hook para interceptar atualização de tickets (PRE - antes de salvar)
     $PLUGIN_HOOKS['pre_item_update']['keeppending'] = 'plugin_keeppending_pre_item_update';
     
