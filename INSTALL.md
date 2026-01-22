@@ -1,81 +1,111 @@
-# 🚀 Instalação Rápida - KeepPending Plugin
+# Instalação - KeepPending Plugin
 
-## Comando Único (Copie e Cole)
-
-```bash
-cd /caminho/do/seu/glpi/plugins && \
-wget https://github.com/gvcaetano190/keepPending/archive/refs/heads/main.tar.gz -O keepPending.tar.gz && \
-tar -xzf keepPending.tar.gz && \
-mv keepPending-main keeppending && \
-rm keepPending.tar.gz && \
-chown -R www-data:www-data keeppending && \
-chmod -R 755 keeppending && \
-echo "✅ Plugin instalado com sucesso!"
-```
-
-**⚠️ IMPORTANTE**: Substitua `/caminho/do/seu/glpi` pelo caminho real do seu GLPI!
-
----
-
-## Exemplo Prático
-
-Se seu GLPI está em `/var/www/html/glpi`:
+## ⚡ Instalação Rápida (Um Comando)
 
 ```bash
 cd /var/www/html/glpi/plugins && \
-wget https://github.com/gvcaetano190/keepPending/archive/refs/heads/main.tar.gz -O keepPending.tar.gz && \
-tar -xzf keepPending.tar.gz && \
-mv keepPending-main keeppending && \
-rm keepPending.tar.gz && \
-chown -R www-data:www-data keeppending && \
-chmod -R 755 keeppending && \
-echo "✅ Plugin instalado com sucesso!"
+sudo wget https://github.com/gvcaetano190/keepPending/archive/refs/heads/main.tar.gz -O keeppending.tar.gz && \
+sudo tar -xzf keeppending.tar.gz && \
+sudo mv keepPending-main keeppending && \
+sudo rm keeppending.tar.gz && \
+sudo chown -R www-data:www-data keeppending && \
+sudo chmod -R 755 keeppending
 ```
 
 ---
 
-## Próximos Passos
+## 📋 Instalação Passo a Passo
+
+### 1. Acessar pasta de plugins
+
+```bash
+cd /var/www/html/glpi/plugins
+```
+
+### 2. Baixar o plugin
+
+```bash
+sudo wget https://github.com/gvcaetano190/keepPending/archive/refs/heads/main.tar.gz -O keeppending.tar.gz
+```
+
+### 3. Descompactar
+
+```bash
+sudo tar -xzf keeppending.tar.gz
+```
+
+### 4. Renomear pasta
+
+```bash
+sudo mv keepPending-main keeppending
+```
+
+### 5. Limpar arquivo temporário
+
+```bash
+sudo rm keeppending.tar.gz
+```
+
+### 6. Ajustar permissões
+
+```bash
+sudo chown -R www-data:www-data keeppending
+sudo chmod -R 755 keeppending
+```
+
+---
+
+## 🔧 Ativar no GLPI
 
 1. Acesse: `http://seu-glpi/front/plugin.php`
-2. Procure por **"KeepPending"**
-3. Clique em **"Instalar"**
-4. Clique em **"Ativar"**
-
-**Pronto! O plugin está funcionando!** 🎉
+2. Localize **KeepPending** na lista
+3. Clique em **Instalar**
+4. Clique em **Ativar**
 
 ---
 
-## Apenas o wget (Método Simples)
-
-Se preferir fazer passo a passo:
+## ✅ Verificar Instalação
 
 ```bash
-# 1. Baixar
-wget https://github.com/gvcaetano190/keepPending/archive/refs/heads/main.tar.gz -O keepPending.tar.gz
+ls -la /var/www/html/glpi/plugins/keeppending/
+```
 
-# 2. Descompactar
-tar -xzf keepPending.tar.gz
-
-# 3. Renomear
-mv keepPending-main keeppending
-
-# 4. Ajustar permissões
-chown -R www-data:www-data keeppending
-chmod -R 755 keeppending
+Deve mostrar:
+```
+setup.php
+hook.php
+front/
+inc/
+locales/
+README.md
+...
 ```
 
 ---
 
-## Verificar se Funcionou
+## 🐛 Problemas Comuns
+
+### Plugin não aparece na lista
+
+- Verifique se a pasta é **`keeppending`** (minúsculas)
+- Confirme que `setup.php` existe na pasta
+
+### Erro de permissão
 
 ```bash
-# Verificar se a pasta foi criada
-ls -la /caminho/do/seu/glpi/plugins/keeppending
-
-# Deve aparecer os arquivos:
-# - setup.php
-# - hook.php
-# - README.md
-# - inc/
-# - locales/
+sudo chown -R www-data:www-data /var/www/html/glpi/plugins/keeppending
 ```
+
+### Limpar e reinstalar
+
+```bash
+sudo rm -rf /var/www/html/glpi/plugins/keeppending
+# Execute os comandos de instalação novamente
+```
+
+---
+
+## 📖 Mais Informações
+
+- [README.md](README.md) - Documentação principal
+- [CHANGELOG.md](CHANGELOG.md) - Histórico de versões
