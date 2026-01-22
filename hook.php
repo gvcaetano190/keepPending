@@ -78,21 +78,33 @@ function plugin_keeppending_uninstall() {
  * @return void
  */
 function plugin_keeppending_pre_item_update($item) {
+    // DEBUG: Log para arquivo dedicado
+    $debug_file = GLPI_LOG_DIR . '/keeppending.log';
+    $timestamp = date('Y-m-d H:i:s');
+    
     // Verificar se é um ticket (chamado)
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
+    file_put_contents($debug_file, "[$timestamp] Hook chamado para Ticket\n", FILE_APPEND);
+    
     // Verificar se o plugin está habilitado
     if (!plugin_keeppending_isEnabled()) {
+        file_put_contents($debug_file, "[$timestamp] Plugin DESABILITADO - saindo\n", FILE_APPEND);
         return;
     }
+    
+    file_put_contents($debug_file, "[$timestamp] Plugin habilitado\n", FILE_APPEND);
     
     // Obter o ID do ticket
     $ticket_id = $item->getID();
     if (!$ticket_id) {
+        file_put_contents($debug_file, "[$timestamp] Ticket ID não encontrado - saindo\n", FILE_APPEND);
         return;
     }
+    
+    file_put_contents($debug_file, "[$timestamp] Ticket ID: $ticket_id\n", FILE_APPEND);
     
     // Obter dados atuais do ticket do banco de dados
     global $DB;
@@ -103,6 +115,7 @@ function plugin_keeppending_pre_item_update($item) {
     ]);
     
     if (!$result->count()) {
+        file_put_contents($debug_file, "[$timestamp] Ticket não encontrado no BD - saindo\n", FILE_APPEND);
         return;
     }
     
@@ -113,16 +126,33 @@ function plugin_keeppending_pre_item_update($item) {
     // INCOMING=1, ASSIGNED=2, PLANNED=3, WAITING=4, SOLVED=5, CLOSED=6
     $PENDING_STATUS = 4;
     
+    file_put_contents($debug_file, "[$timestamp] Status atual no BD: $current_status (Pendente=4)\n", FILE_APPEND);
+    
+    // Log do input recebido
+    $input_status = isset($item->input['status']) ? $item->input['status'] : 'não definido';
+    file_put_contents($debug_file, "[$timestamp] Status no input: $input_status\n", FILE_APPEND);
+    file_put_contents($debug_file, "[$timestamp] Campos no input: " . implode(', ', array_keys($item->input)) . "\n", FILE_APPEND);
+    
     // Se o ticket está atualmente em status "Pendente" (status = 4)
     if ($current_status === $PENDING_STATUS) {
+        file_put_contents($debug_file, "[$timestamp] ✓ Ticket está em PENDENTE\n", FILE_APPEND);
+        
         // Verificar se o status está sendo alterado
         $new_status = isset($item->input['status']) ? (int) $item->input['status'] : $current_status;
         
+        file_put_contents($debug_file, "[$timestamp] Novo status solicitado: $new_status\n", FILE_APPEND);
+        
         if ($new_status !== $PENDING_STATUS) {
+            file_put_contents($debug_file, "[$timestamp] ⚠ Tentativa de mudar status de $current_status para $new_status\n", FILE_APPEND);
+            
             // Detectar se é uma mudança MANUAL (direta do campo status)
             // ou se é uma mudança automática (via resposta, email, etc)
-            if (plugin_keeppending_isManualStatusChange($item)) {
+            $is_manual = plugin_keeppending_isManualStatusChange($item);
+            file_put_contents($debug_file, "[$timestamp] É mudança manual? " . ($is_manual ? 'SIM' : 'NÃO') . "\n", FILE_APPEND);
+            
+            if ($is_manual) {
                 // É uma mudança MANUAL - PERMITIR (não faz nada)
+                file_put_contents($debug_file, "[$timestamp] ✓ PERMITIDO - mudança manual\n", FILE_APPEND);
                 plugin_keeppending_log(
                     $ticket_id,
                     'Mudança MANUAL de status permitida',
@@ -131,6 +161,7 @@ function plugin_keeppending_pre_item_update($item) {
                 return;
             } else {
                 // É uma mudança AUTOMÁTICA (resposta, email) - BLOQUEAR
+                file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status 4\n", FILE_APPEND);
                 $item->input['status'] = $PENDING_STATUS;
                 
                 // Registrar a ação no log
@@ -144,7 +175,11 @@ function plugin_keeppending_pre_item_update($item) {
                     )
                 );
             }
+        } else {
+            file_put_contents($debug_file, "[$timestamp] Status não está mudando - nada a fazer\n", FILE_APPEND);
         }
+    } else {
+        file_put_contents($debug_file, "[$timestamp] Ticket NÃO está em Pendente (status=$current_status) - ignorando\n", FILE_APPEND);
     }
 }
 
