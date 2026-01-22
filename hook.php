@@ -223,40 +223,51 @@ function plugin_keeppending_isManualStatusChange($item) {
     $debug_file = GLPI_LOG_DIR . '/keeppending.log';
     $timestamp = date('Y-m-d H:i:s');
     
+    // Calcular timestamp de 30 segundos atrás
+    $time_limit = date('Y-m-d H:i:s', strtotime('-30 seconds'));
+    
     // NOVA LÓGICA: Verificar se houve um followup adicionado recentemente (últimos 30 segundos)
     // Se houver, a mudança de status é consequência dessa interação = AUTOMÁTICA
-    $recent_followup = $DB->request([
-        'SELECT' => ['id', 'date_creation'],
-        'FROM'   => 'glpi_itilfollowups',
-        'WHERE'  => [
-            'itemtype' => 'Ticket',
-            'items_id' => $ticket_id,
-            ['date_creation' => ['>', date('Y-m-d H:i:s', strtotime('-30 seconds'))]]
-        ],
-        'LIMIT'  => 1
-    ]);
-    
-    if ($recent_followup->count() > 0) {
-        $followup = $recent_followup->current();
-        file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-        return false; // Há followup recente = mudança automática
+    try {
+        $recent_followup = $DB->request([
+            'SELECT' => ['id', 'date_creation'],
+            'FROM'   => 'glpi_itilfollowups',
+            'WHERE'  => [
+                'itemtype' => 'Ticket',
+                'items_id' => $ticket_id,
+                'date_creation' => ['>', $time_limit]
+            ],
+            'LIMIT'  => 1
+        ]);
+        
+        if ($recent_followup->count() > 0) {
+            $followup = $recent_followup->current();
+            file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
+            return false; // Há followup recente = mudança automática
+        }
+    } catch (Exception $e) {
+        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar followups: " . $e->getMessage() . "\n", FILE_APPEND);
     }
     
     // Verificar se há tarefa recente
-    $recent_task = $DB->request([
-        'SELECT' => ['id', 'date_creation'],
-        'FROM'   => 'glpi_tickettasks',
-        'WHERE'  => [
-            'tickets_id' => $ticket_id,
-            ['date_creation' => ['>', date('Y-m-d H:i:s', strtotime('-30 seconds'))]]
-        ],
-        'LIMIT'  => 1
-    ]);
-    
-    if ($recent_task->count() > 0) {
-        $task = $recent_task->current();
-        file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-        return false; // Há tarefa recente = mudança automática
+    try {
+        $recent_task = $DB->request([
+            'SELECT' => ['id', 'date_creation'],
+            'FROM'   => 'glpi_tickettasks',
+            'WHERE'  => [
+                'tickets_id' => $ticket_id,
+                'date_creation' => ['>', $time_limit]
+            ],
+            'LIMIT'  => 1
+        ]);
+        
+        if ($recent_task->count() > 0) {
+            $task = $recent_task->current();
+            file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
+            return false; // Há tarefa recente = mudança automática
+        }
+    } catch (Exception $e) {
+        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar tarefas: " . $e->getMessage() . "\n", FILE_APPEND);
     }
     
     file_put_contents($debug_file, "[$timestamp] Nenhuma interação recente - mudança MANUAL\n", FILE_APPEND);
