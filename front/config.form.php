@@ -154,17 +154,18 @@ echo "</tr>";
 
 echo "<tr class='tab_bg_1'>";
 echo "<td colspan='2'>";
-echo "<p>" . __('Este plugin mantém o status de chamados quando respostas são adicionadas automaticamente.', 'keeppending') . "</p>";
+echo "<p>" . __('Este plugin controla mudanças automáticas de status quando respostas são adicionadas.', 'keeppending') . "</p>";
 echo "<p><strong>" . __('Comportamento:', 'keeppending') . "</strong></p>";
 echo "<ul style='text-align: left; margin-left: 40px;'>";
 echo "<li>✅ " . __('PERMITE mudanças manuais de status', 'keeppending') . "</li>";
-echo "<li>❌ " . __('BLOQUEIA mudanças automáticas (respostas, emails)', 'keeppending') . "</li>";
+echo "<li>🔄 " . __('REDIRECIONA mudanças automáticas', 'keeppending') . "</li>";
 echo "</ul>";
 echo "<p><strong>" . __('Cenários protegidos:', 'keeppending') . "</strong></p>";
 echo "<ul style='text-align: left; margin-left: 40px;'>";
-echo "<li>" . __('Pendente: Cliente responde → Status NÃO muda para "Em atendimento"', 'keeppending') . "</li>";
-echo "<li>" . __('Solucionado: Cliente responde/agradece → Status NÃO muda para "Em atendimento"', 'keeppending') . "</li>";
+echo "<li>" . __('Pendente: Cliente responde → Status MANTÉM "Pendente"', 'keeppending') . "</li>";
+echo "<li>" . __('Solucionado: Cliente responde → Status MUDA para "Pendente" (não "Em atendimento")', 'keeppending') . "</li>";
 echo "</ul>";
+echo "<p><em>" . __('Isso protege seu SLA quando clientes respondem após solução.', 'keeppending') . "</em></p>";
 echo "</td>";
 echo "</tr>";
 

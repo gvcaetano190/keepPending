@@ -173,21 +173,38 @@ function plugin_keeppending_pre_item_update($item) {
                 );
                 return;
             } else {
-                // É uma mudança AUTOMÁTICA (resposta, email) - BLOQUEAR
-                file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status $current_status\n", FILE_APPEND);
-                $item->input['status'] = $current_status;
+                // É uma mudança AUTOMÁTICA (resposta, email)
                 
-                // Registrar a ação no log
-                plugin_keeppending_log(
-                    $ticket_id,
-                    'Mudança automática de status BLOQUEADA',
-                    sprintf(
-                        'Interação detectada. Status mantido em %s: %d → %d (bloqueado)',
-                        $status_name,
-                        $current_status,
-                        $new_status
-                    )
-                );
+                // Se estava SOLUCIONADO, mudar para PENDENTE
+                if ($current_status === $SOLVED_STATUS) {
+                    file_put_contents($debug_file, "[$timestamp] ↪ REDIRECIONADO - Solucionado → Pendente (em vez de Em atendimento)\n", FILE_APPEND);
+                    $item->input['status'] = $PENDING_STATUS;
+                    
+                    plugin_keeppending_log(
+                        $ticket_id,
+                        'Status REDIRECIONADO para Pendente',
+                        sprintf(
+                            'Interação em ticket Solucionado. Status alterado: %d → %d (Pendente)',
+                            $current_status,
+                            $PENDING_STATUS
+                        )
+                    );
+                } else {
+                    // Se estava PENDENTE, manter PENDENTE
+                    file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status $current_status\n", FILE_APPEND);
+                    $item->input['status'] = $current_status;
+                    
+                    plugin_keeppending_log(
+                        $ticket_id,
+                        'Mudança automática de status BLOQUEADA',
+                        sprintf(
+                            'Interação detectada. Status mantido em %s: %d → %d (bloqueado)',
+                            $status_name,
+                            $current_status,
+                            $new_status
+                        )
+                    );
+                }
             }
         } else {
             file_put_contents($debug_file, "[$timestamp] Status não está mudando - nada a fazer\n", FILE_APPEND);
