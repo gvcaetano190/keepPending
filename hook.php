@@ -207,63 +207,64 @@ function plugin_keeppending_item_update($item) {
  * 
  * Mudanças MANUAIS: 
  * - Usuário vai em "Editar Ticket" e muda o status diretamente
- * - APENAS campos de metadados são alterados (status, urgency, etc)
+ * - NÃO houve followup/resposta recente no ticket
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Respostas, emails, automações que alteram status junto com conteúdo
- * - Quando um followup/resposta é adicionado junto com mudança de status
+ * - Respostas, emails, automações que alteram status
+ * - Houve um followup adicionado nos últimos 30 segundos
  * 
  * @param object $item Objeto Ticket
  * @return bool true se é mudança manual, false se é automática
  */
 function plugin_keeppending_isManualStatusChange($item) {
-    $input = $item->input;
+    global $DB;
     
-    // Campos que indicam uma INTERAÇÃO/RESPOSTA (automática)
-    // Se algum destes estiver presente, é uma mudança automática
-    $interaction_fields = [
-        '_itil_followup',       // Seguimento adicionado
-        'content',              // Conteúdo de resposta
-        '_content',             // Conteúdo alternativo
-        'solution',             // Solução
-        '_solution',            // Solução alternativa
-        '_tasktemplates_id',    // Template de tarefa
-        '_task',                // Tarefa
-        '_validation',          // Validação
-        'pending',              // Marcação de pendente via interface
-        '_pending',             // Pendente alternativo
-    ];
+    $ticket_id = $item->getID();
+    $debug_file = GLPI_LOG_DIR . '/keeppending.log';
+    $timestamp = date('Y-m-d H:i:s');
     
-    // Verificar $_POST também, pois algumas interações vêm de lá
-    $post_interaction_fields = [
-        'content',
-        'add_followup',
-        'add_task',
-        'add_solution',
-    ];
+    // NOVA LÓGICA: Verificar se houve um followup adicionado recentemente (últimos 30 segundos)
+    // Se houver, a mudança de status é consequência dessa interação = AUTOMÁTICA
+    $recent_followup = $DB->request([
+        'SELECT' => ['id', 'date_creation'],
+        'FROM'   => 'glpi_itilfollowups',
+        'WHERE'  => [
+            'itemtype' => 'Ticket',
+            'items_id' => $ticket_id,
+            ['date_creation' => ['>', date('Y-m-d H:i:s', strtotime('-30 seconds'))]]
+        ],
+        'LIMIT'  => 1
+    ]);
     
-    // Verificar se há campos de interação no input
-    foreach ($interaction_fields as $field) {
-        if (isset($input[$field]) && !empty($input[$field])) {
-            // Há uma interação - é automático
-            return false;
-        }
+    if ($recent_followup->count() > 0) {
+        $followup = $recent_followup->current();
+        file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
+        return false; // Há followup recente = mudança automática
     }
     
-    // Verificar POST
-    foreach ($post_interaction_fields as $field) {
-        if (isset($_POST[$field]) && !empty($_POST[$field])) {
-            return false;
-        }
+    // Verificar se há tarefa recente
+    $recent_task = $DB->request([
+        'SELECT' => ['id', 'date_creation'],
+        'FROM'   => 'glpi_tickettasks',
+        'WHERE'  => [
+            'tickets_id' => $ticket_id,
+            ['date_creation' => ['>', date('Y-m-d H:i:s', strtotime('-30 seconds'))]]
+        ],
+        'LIMIT'  => 1
+    ]);
+    
+    if ($recent_task->count() > 0) {
+        $task = $recent_task->current();
+        file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
+        return false; // Há tarefa recente = mudança automática
     }
     
-    // Verificar se há arrays de followups sendo adicionados
-    if (isset($input['_itil_followup']) || isset($input['ITILFollowup'])) {
-        return false;
-    }
-    
-    // Se chegou aqui, é uma mudança manual
-    return true;
+    file_put_contents($debug_file, "[$timestamp] Nenhuma interação recente - mudança MANUAL\n", FILE_APPEND);
+    return true; // Sem interação recente = mudança manual
+}
+
+/**
+ * Verifica se o plugin está habilitado
 }
 
 /**
