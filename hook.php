@@ -7,67 +7,8 @@
  * Este arquivo contém os hooks principais do plugin que interceptam
  * as operações de atualização de tickets
  * 
- * @license     GPL v2 ou superior
- * @link        https://github.com/gvcaetano190/keepPending
- * @author      Gabriel Caetano
- * @version     1.0.0
  * ============================================================================
  */
-
-/**
- * Install hook - Função de instalação do plugin
- * 
- * @return boolean
- */
-function plugin_keeppending_install() {
-    global $DB;
-    
-    // Criar tabela de configuração do plugin
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
-        $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
-            `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            `enable_keep_pending` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status pendente',
-            `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado',
-            `enable_logs` tinyint(1) DEFAULT 1 COMMENT 'Habilitar logs',
-            `created_at` datetime DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        
-        $DB->query($query);
-        
-        // Inserir configurações padrão
-        if ($DB->tableExists('glpi_plugin_keeppending_config')) {
-            $DB->insert('glpi_plugin_keeppending_config', [
-                'enable_keep_pending' => 1,
-                'enable_keep_solved'  => 1,
-                'enable_logs'         => 1
-            ]);
-        }
-    } else {
-        // Adicionar coluna enable_keep_solved se não existir (para upgrades)
-        if (!$DB->fieldExists('glpi_plugin_keeppending_config', 'enable_keep_solved')) {
-            $DB->query("ALTER TABLE `glpi_plugin_keeppending_config` ADD `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado' AFTER `enable_keep_pending`");
-            $DB->update('glpi_plugin_keeppending_config', ['enable_keep_solved' => 1], [1]);
-        }
-    }
-    
-    return true;
-}
-
-/**
- * Uninstall hook - Função de desinstalação do plugin
- * 
- * @return boolean
- */
-function plugin_keeppending_uninstall() {
-    global $DB;
-    
-    // Remover tabela de configuração
-    if ($DB->tableExists('glpi_plugin_keeppending_config')) {
-        $DB->query("DROP TABLE `glpi_plugin_keeppending_config`");
-    }
-    
-    return true;
-}
 
 /**
  * Hook PRÉ-ATUALIZAÇÃO: Intercepta antes de salvar mudanças no banco de dados
@@ -85,34 +26,22 @@ function plugin_keeppending_uninstall() {
  * @param object $item Objeto Ticket que será atualizado
  * @return void
  */
-function plugin_keeppending_pre_item_update($item) {
-    // DEBUG: Log para arquivo dedicado
-    $debug_file = GLPI_LOG_DIR . '/keeppending.log';
-    $timestamp = date('Y-m-d H:i:s');
-    
+function plugin_keepPending_pre_item_update($item) {
     // Verificar se é um ticket (chamado)
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
-    file_put_contents($debug_file, "[$timestamp] Hook chamado para Ticket\n", FILE_APPEND);
-    
     // Verificar se o plugin está habilitado
-    if (!plugin_keeppending_isEnabled()) {
-        file_put_contents($debug_file, "[$timestamp] Plugin DESABILITADO - saindo\n", FILE_APPEND);
+    if (!plugin_keepPending_isEnabled()) {
         return;
     }
-    
-    file_put_contents($debug_file, "[$timestamp] Plugin habilitado\n", FILE_APPEND);
     
     // Obter o ID do ticket
     $ticket_id = $item->getID();
     if (!$ticket_id) {
-        file_put_contents($debug_file, "[$timestamp] Ticket ID não encontrado - saindo\n", FILE_APPEND);
         return;
     }
-    
-    file_put_contents($debug_file, "[$timestamp] Ticket ID: $ticket_id\n", FILE_APPEND);
     
     // Obter dados atuais do ticket do banco de dados
     global $DB;
@@ -123,94 +52,41 @@ function plugin_keeppending_pre_item_update($item) {
     ]);
     
     if (!$result->count()) {
-        file_put_contents($debug_file, "[$timestamp] Ticket não encontrado no BD - saindo\n", FILE_APPEND);
         return;
     }
     
     $current_data = $result->current();
-    $current_status = (int) $current_data['status'];
+    $current_status = $current_data['status'];
     
-    // Status em GLPI: INCOMING=1, ASSIGNED=2, PLANNED=3, WAITING=4, SOLVED=5, CLOSED=6
-    $PENDING_STATUS = 4;  // Pendente
-    $SOLVED_STATUS = 5;   // Solucionado
+    // Status de Pendente em GLPI = 5
+    $PENDING_STATUS = 5;
     
-    // Verificar quais status proteger baseado na configuração
-    $protected_statuses = plugin_keeppending_getProtectedStatuses();
-    
-    file_put_contents($debug_file, "[$timestamp] Status atual no BD: $current_status (Pendente=4, Solucionado=5)\n", FILE_APPEND);
-    file_put_contents($debug_file, "[$timestamp] Status protegidos: " . implode(', ', $protected_statuses) . "\n", FILE_APPEND);
-    
-    // Log do input recebido
-    $input_status = isset($item->input['status']) ? $item->input['status'] : 'não definido';
-    file_put_contents($debug_file, "[$timestamp] Status no input: $input_status\n", FILE_APPEND);
-    file_put_contents($debug_file, "[$timestamp] Campos no input: " . implode(', ', array_keys($item->input)) . "\n", FILE_APPEND);
-    
-    // Se o ticket está em um dos status protegidos (Pendente ou Solucionado)
-    if (in_array($current_status, $protected_statuses)) {
-        $status_name = ($current_status === $PENDING_STATUS) ? 'PENDENTE' : 'SOLUCIONADO';
-        file_put_contents($debug_file, "[$timestamp] ✓ Ticket está em $status_name\n", FILE_APPEND);
-        
+    // Se o ticket está atualmente em status "Pendente" (status = 5)
+    if ($current_status == $PENDING_STATUS) {
         // Verificar se o status está sendo alterado
-        $new_status = isset($item->input['status']) ? (int) $item->input['status'] : $current_status;
-        
-        file_put_contents($debug_file, "[$timestamp] Novo status solicitado: $new_status\n", FILE_APPEND);
-        
-        if ($new_status !== $current_status) {
-            file_put_contents($debug_file, "[$timestamp] ⚠ Tentativa de mudar status de $current_status para $new_status\n", FILE_APPEND);
+        if (isset($item->input['status']) && $item->input['status'] != $PENDING_STATUS) {
             
             // Detectar se é uma mudança MANUAL (direta do campo status)
             // ou se é uma mudança automática (via resposta, email, etc)
-            $is_manual = plugin_keeppending_isManualStatusChange($item);
-            file_put_contents($debug_file, "[$timestamp] É mudança manual? " . ($is_manual ? 'SIM' : 'NÃO') . "\n", FILE_APPEND);
-            
-            if ($is_manual) {
+            if (plugin_keepPending_isManualStatusChange($item)) {
                 // É uma mudança MANUAL - PERMITIR (não faz nada)
-                file_put_contents($debug_file, "[$timestamp] ✓ PERMITIDO - mudança manual\n", FILE_APPEND);
-                plugin_keeppending_log(
-                    $ticket_id,
-                    'Mudança MANUAL de status permitida',
-                    sprintf('Status alterado manualmente: %d → %d', $current_status, $new_status)
-                );
                 return;
             } else {
-                // É uma mudança AUTOMÁTICA (resposta, email)
+                // É uma mudança AUTOMÁTICA (resposta, email) - BLOQUEAR
+                $item->input['status'] = $PENDING_STATUS;
                 
-                // Se estava SOLUCIONADO, mudar para PENDENTE
-                if ($current_status === $SOLVED_STATUS) {
-                    file_put_contents($debug_file, "[$timestamp] ↪ REDIRECIONADO - Solucionado → Pendente (em vez de Em atendimento)\n", FILE_APPEND);
-                    $item->input['status'] = $PENDING_STATUS;
-                    
-                    plugin_keeppending_log(
-                        $ticket_id,
-                        'Status REDIRECIONADO para Pendente',
-                        sprintf(
-                            'Interação em ticket Solucionado. Status alterado: %d → %d (Pendente)',
-                            $current_status,
-                            $PENDING_STATUS
-                        )
-                    );
-                } else {
-                    // Se estava PENDENTE, manter PENDENTE
-                    file_put_contents($debug_file, "[$timestamp] ✗ BLOQUEADO - mudança automática! Mantendo status $current_status\n", FILE_APPEND);
-                    $item->input['status'] = $current_status;
-                    
-                    plugin_keeppending_log(
-                        $ticket_id,
-                        'Mudança automática de status BLOQUEADA',
-                        sprintf(
-                            'Interação detectada. Status mantido em %s: %d → %d (bloqueado)',
-                            $status_name,
-                            $current_status,
-                            $new_status
-                        )
-                    );
-                }
+                // Registrar a ação no log
+                plugin_keepPending_log(
+                    $ticket_id,
+                    'Mudança automática de status bloqueada',
+                    sprintf(
+                        'Interação detectada. Status mantido em Pendente: %s → %s',
+                        $current_status,
+                        $_POST['status'] ?? 'desconhecido'
+                    )
+                );
             }
-        } else {
-            file_put_contents($debug_file, "[$timestamp] Status não está mudando - nada a fazer\n", FILE_APPEND);
         }
-    } else {
-        file_put_contents($debug_file, "[$timestamp] Ticket NÃO está em status protegido (status=$current_status) - ignorando\n", FILE_APPEND);
     }
 }
 
@@ -222,12 +98,12 @@ function plugin_keeppending_pre_item_update($item) {
  * @param object $item Objeto Ticket que foi atualizado
  * @return void
  */
-function plugin_keeppending_item_update($item) {
+function plugin_keepPending_item_update($item) {
     if ($item->getType() !== 'Ticket') {
         return;
     }
     
-    if (!plugin_keeppending_isEnabled()) {
+    if (!plugin_keepPending_isEnabled()) {
         return;
     }
 }
@@ -238,123 +114,96 @@ function plugin_keeppending_item_update($item) {
  * 
  * Mudanças MANUAIS: 
  * - Usuário vai em "Editar Ticket" e muda o status diretamente
- * - NÃO houve followup/resposta recente no ticket
+ * - Usuário usa dropdown de status no formulário do ticket
+ * - Origem via interface web (HTTP_REFERER contém ticket.form.php)
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Respostas, emails, automações que alteram status
- * - Houve um followup adicionado nos últimos 30 segundos
+ * - Respostas por email (MailCollector)
+ * - Automações de workflow/regras
+ * - APIs sem interação de usuário
  * 
  * @param object $item Objeto Ticket
  * @return bool true se é mudança manual, false se é automática
  */
-function plugin_keeppending_isManualStatusChange($item) {
-    global $DB;
+function plugin_keepPending_isManualStatusChange($item) {
+    $input = $item->input;
     
-    $ticket_id = $item->getID();
-    $debug_file = GLPI_LOG_DIR . '/keeppending.log';
-    $timestamp = date('Y-m-d H:i:s');
-    
-    // Calcular timestamp de 30 segundos atrás
-    $time_limit = date('Y-m-d H:i:s', strtotime('-30 seconds'));
-    
-    // NOVA LÓGICA: Verificar se houve um followup adicionado recentemente (últimos 30 segundos)
-    // Se houver, a mudança de status é consequência dessa interação = AUTOMÁTICA
-    try {
-        $recent_followup = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_itilfollowups',
-            'WHERE'  => [
-                'itemtype' => 'Ticket',
-                'items_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_followup->count() > 0) {
-            $followup = $recent_followup->current();
-            file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há followup recente = mudança automática
-        }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar followups: " . $e->getMessage() . "\n", FILE_APPEND);
+    // 1. Se veio do MailCollector ou API interna, é automático
+    if (isset($input['_mailgate']) || isset($input['_from_email'])) {
+        return false; // Mudança via email - AUTOMÁTICO
     }
     
-    // Verificar se há tarefa recente
-    try {
-        $recent_task = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_tickettasks',
-            'WHERE'  => [
-                'tickets_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_task->count() > 0) {
-            $task = $recent_task->current();
-            file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há tarefa recente = mudança automática
+    // 2. Se é requisição via interface web (tem HTTP_REFERER do GLPI), é manual
+    if (isset($_SERVER['HTTP_REFERER'])) {
+        $referer = $_SERVER['HTTP_REFERER'];
+        // Se vem do formulário do ticket, é mudança manual
+        if (strpos($referer, 'ticket.form.php') !== false ||
+            strpos($referer, 'front/ticket.php') !== false) {
+            return true; // Mudança via interface web - MANUAL
         }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar tarefas: " . $e->getMessage() . "\n", FILE_APPEND);
     }
     
-    file_put_contents($debug_file, "[$timestamp] Nenhuma interação recente - mudança MANUAL\n", FILE_APPEND);
-    return true; // Sem interação recente = mudança manual
+    // 3. Se é POST direto no formulário com _glpi_csrf_token, é interação humana
+    if (isset($_POST['_glpi_csrf_token']) || isset($input['_glpi_csrf_token'])) {
+        return true; // Mudança com CSRF token - MANUAL (usuário logado)
+    }
+    
+    // 4. Se há campos de conteúdo sendo alterados JUNTO com status na mesma requisição
+    // isso indica que o status está mudando como efeito colateral
+    $auto_content_fields = [
+        'content',          // Conteúdo de resposta
+        '_do_not_recompute_takeintoaccount', // Flag de automação
+    ];
+    
+    foreach ($auto_content_fields as $field) {
+        if (isset($input[$field]) && !empty($input[$field])) {
+            return false; // Tem conteúdo junto - AUTOMÁTICO
+        }
+    }
+    
+    // 5. Verificar se APENAS status (e campos seguros) estão mudando
+    $safe_fields = ['status', 'id', 'date_mod', '_job', '_no_history', '_glpi_csrf_token', 
+                    '_read_date_mod', '_tasktemplates_id', '_actors', 'items_id'];
+    $changed_fields = array_keys($input);
+    $other_fields = array_diff($changed_fields, $safe_fields);
+    
+    if (empty($other_fields)) {
+        return true; // Apenas campos seguros - MANUAL
+    }
+    
+    // 6. Caso padrão: se chegou até aqui com sessão válida, é manual
+    if (Session::getLoginUserID()) {
+        return true; // Usuário logado - MANUAL
+    }
+    
+    // Fallback: considerar automático para segurança
+    return false;
 }
 
 /**
- * Retorna lista de status protegidos pelo plugin
+ * Verifica se o plugin está habilitado
  * 
- * @return array Lista de status IDs que devem ser protegidos
+ * @return bool true se plugin está habilitado
  */
-function plugin_keeppending_getProtectedStatuses() {
+function plugin_keepPending_isEnabled() {
     global $DB;
     
-    $protected = [];
-    
-    // Status: WAITING=4 (Pendente), SOLVED=5 (Solucionado)
-    $PENDING_STATUS = 4;
-    $SOLVED_STATUS = 5;
-    
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
-        // Padrão: proteger ambos
-        return [$PENDING_STATUS, $SOLVED_STATUS];
+    if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
+        return false;
     }
     
     $result = $DB->request([
-        'SELECT' => ['enable_keep_pending', 'enable_keep_solved'],
-        'FROM'   => 'glpi_plugin_keeppending_config',
+        'SELECT' => ['enable_keep_pending'],
+        'FROM'   => 'glpi_plugin_keepPending_config',
         'LIMIT'  => 1
     ]);
     
     if (!$result->count()) {
-        return [$PENDING_STATUS, $SOLVED_STATUS];
+        return true; // Habilitado por padrão
     }
     
     $config = $result->current();
-    
-    if ((bool) ($config['enable_keep_pending'] ?? true)) {
-        $protected[] = $PENDING_STATUS;
-    }
-    
-    if ((bool) ($config['enable_keep_solved'] ?? true)) {
-        $protected[] = $SOLVED_STATUS;
-    }
-    
-    return $protected;
-}
-
-/**
- * Verifica se o plugin está habilitado (pelo menos um status protegido)
- * 
- * @return bool true se plugin está habilitado
- */
-function plugin_keeppending_isEnabled() {
-    $protected = plugin_keeppending_getProtectedStatuses();
-    return count($protected) > 0;
+    return (bool) $config['enable_keep_pending'];
 }
 
 /**
@@ -365,17 +214,17 @@ function plugin_keeppending_isEnabled() {
  * @param string $details Detalhes da ação
  * @return void
  */
-function plugin_keeppending_log($ticket_id, $action, $details = '') {
+function plugin_keepPending_log($ticket_id, $action, $details = '') {
     global $DB;
     
     // Verificar se logs estão habilitados
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
+    if (!$DB->tableExists('glpi_plugin_keepPending_config')) {
         return;
     }
     
     $result = $DB->request([
         'SELECT' => ['enable_logs'],
-        'FROM'   => 'glpi_plugin_keeppending_config',
+        'FROM'   => 'glpi_plugin_keepPending_config',
         'LIMIT'  => 1
     ]);
     
@@ -388,12 +237,16 @@ function plugin_keeppending_log($ticket_id, $action, $details = '') {
         return;
     }
     
-    // Usar Toolbox::logInFile ao invés de Event::log (mais simples e compatível)
-    $message = sprintf(
-        'Ticket #%d - %s%s',
+    // Registrar no log de eventos do GLPI
+    Event::log(
         $ticket_id,
-        $action,
-        $details ? ' - ' . $details : ''
+        'Ticket',
+        4, // type log (modificação)
+        'keepPending',
+        sprintf(
+            '%s: %s %s',
+            $action,
+            $details ? '- ' . $details : ''
+        )
     );
-    Toolbox::logInFile('keeppending', $message . "\n");
 }
