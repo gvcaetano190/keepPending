@@ -140,6 +140,11 @@ function plugin_keeppending_pre_item_update($item) {
                 plugin_keeppending_debug_log("→ REDIRECIONANDO para Pendente em vez de Em Atendimento");
                 $item->input['status'] = $PENDING_STATUS;
                 
+                // Marcar para correção pós-update (caso o GLPI ignore nosso input)
+                global $KEEPPENDING_FORCE_PENDING;
+                $KEEPPENDING_FORCE_PENDING[$ticket_id] = $PENDING_STATUS;
+                plugin_keeppending_debug_log("→ Marcado ticket #{$ticket_id} para forçar Pendente no pós-update");
+                
                 // Registrar a ação no log do GLPI
                 Event::log(
                     $ticket_id,
@@ -167,7 +172,57 @@ function plugin_keeppending_item_update($item) {
     if ($item->getType() !== 'Ticket') {
         return;
     }
-    // Apenas para compatibilidade, não faz nada por enquanto
+    
+    global $KEEPPENDING_FORCE_PENDING;
+    $ticket_id = $item->getID();
+    
+    // Verificar se este ticket foi marcado para forçar Pendente
+    if (isset($KEEPPENDING_FORCE_PENDING[$ticket_id])) {
+        $target_status = $KEEPPENDING_FORCE_PENDING[$ticket_id];
+        plugin_keeppending_debug_log("=== ITEM_UPDATE (PÓS) Ticket #{$ticket_id} ===");
+        plugin_keeppending_debug_log("→ Forçando status para {$target_status} (Pendente)");
+        
+        // Verificar status atual após a atualização
+        global $DB;
+        $result = $DB->request([
+            'SELECT' => ['status'],
+            'FROM'   => 'glpi_tickets',
+            'WHERE'  => ['id' => $ticket_id]
+        ]);
+        
+        if ($result->count()) {
+            $current = $result->current();
+            $current_status = (int)$current['status'];
+            plugin_keeppending_debug_log("Status atual após update: {$current_status}");
+            
+            // Se não está em Pendente, forçar a mudança
+            if ($current_status != $target_status) {
+                plugin_keeppending_debug_log("→ Status diferente de Pendente! Forçando UPDATE direto no banco");
+                
+                $DB->update(
+                    'glpi_tickets',
+                    ['status' => $target_status],
+                    ['id' => $ticket_id]
+                );
+                
+                plugin_keeppending_debug_log("✓ Status forçado para {$target_status} via UPDATE direto");
+                
+                // Registrar no log do GLPI
+                Event::log(
+                    $ticket_id,
+                    'Ticket',
+                    4,
+                    'keeppending',
+                    "Status FORÇADO para PENDENTE após resposta em ticket Solucionado"
+                );
+            } else {
+                plugin_keeppending_debug_log("✓ Status já está em Pendente - OK");
+            }
+        }
+        
+        // Limpar o flag
+        unset($KEEPPENDING_FORCE_PENDING[$ticket_id]);
+    }
 }
 
 /**
