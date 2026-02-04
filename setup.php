@@ -89,3 +89,48 @@ function plugin_keeppending_check_prerequisites() {
 function plugin_keeppending_check_config($verbose = false) {
     return true;
 }
+
+/**
+ * Install the plugin - Needed
+ * 
+ * @return boolean
+ */
+function plugin_keeppending_install() {
+    global $DB;
+    
+    // Criar tabela de configuração se não existir
+    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
+        $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `enable_keep_pending` tinyint(1) NOT NULL DEFAULT 1,
+            `enable_logs` tinyint(1) NOT NULL DEFAULT 1,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        
+        $DB->query($query);
+        
+        // Inserir configuração padrão
+        $DB->insert('glpi_plugin_keeppending_config', [
+            'enable_keep_pending' => 1,
+            'enable_logs' => 1
+        ]);
+    }
+    
+    return true;
+}
+
+/**
+ * Uninstall the plugin - Needed
+ * 
+ * @return boolean
+ */
+function plugin_keeppending_uninstall() {
+    global $DB;
+    
+    // Remover tabela de configuração
+    if ($DB->tableExists('glpi_plugin_keeppending_config')) {
+        $DB->query("DROP TABLE `glpi_plugin_keeppending_config`");
+    }
+    
+    return true;
+}
