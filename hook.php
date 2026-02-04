@@ -234,36 +234,51 @@ function plugin_keeppending_item_update($item) {
 
 /**
  * Verifica se é uma mudança MANUAL de status (feita pelo usuário diretamente)
- * ou uma mudança automática (via email/mailgate)
+ * ou uma mudança automática (via email/cron)
  * 
  * Mudanças MANUAIS: 
- * - Qualquer mudança que NÃO veio por email
+ * - Tem HTTP_REFERER (veio de uma página web)
+ * - OU tem CSRF token (formulário web)
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Apenas respostas por email (MailCollector)
+ * - Não tem HTTP_REFERER E não tem CSRF token (cron/email)
  * 
  * @param object $item Objeto Ticket
- * @return bool true se é mudança manual, false se é automática (email)
+ * @return bool true se é mudança manual, false se é automática (email/cron)
  */
 function plugin_keeppending_isManualStatusChange($item) {
     $input = $item->input;
     $debug_file = GLPI_LOG_DIR . '/keeppending.log';
     $timestamp = date('Y-m-d H:i:s');
     
-    // ÚNICA VERIFICAÇÃO: Se veio por email/mailgate, é AUTOMÁTICO
+    // Verificar flags explícitos de email primeiro
     if (isset($input['_mailgate'])) {
-        file_put_contents($debug_file, "[$timestamp] Detectado: _mailgate - mudança via EMAIL = AUTOMÁTICO\n", FILE_APPEND);
-        return false; // AUTOMÁTICO
+        file_put_contents($debug_file, "[$timestamp] Detectado: _mailgate - AUTOMÁTICO\n", FILE_APPEND);
+        return false;
     }
     
     if (isset($input['_from_email'])) {
-        file_put_contents($debug_file, "[$timestamp] Detectado: _from_email - mudança via EMAIL = AUTOMÁTICO\n", FILE_APPEND);
-        return false; // AUTOMÁTICO
+        file_put_contents($debug_file, "[$timestamp] Detectado: _from_email - AUTOMÁTICO\n", FILE_APPEND);
+        return false;
     }
     
-    // Qualquer outra coisa é MANUAL
-    file_put_contents($debug_file, "[$timestamp] Sem flags de email - mudança MANUAL\n", FILE_APPEND);
-    return true; // MANUAL
+    // Verificar HTTP_REFERER - interface web sempre tem
+    $has_referer = isset($_SERVER['HTTP_REFERER']) && !empty($_SERVER['HTTP_REFERER']);
+    file_put_contents($debug_file, "[$timestamp] HTTP_REFERER: " . ($has_referer ? $_SERVER['HTTP_REFERER'] : 'NENHUM') . "\n", FILE_APPEND);
+    
+    // Verificar CSRF token - formulário web sempre tem
+    $has_csrf = isset($_POST['_glpi_csrf_token']) || isset($input['_glpi_csrf_token']);
+    file_put_contents($debug_file, "[$timestamp] CSRF token: " . ($has_csrf ? 'SIM' : 'NÃO') . "\n", FILE_APPEND);
+    
+    // Se tem referer OU csrf, é interface web = MANUAL
+    if ($has_referer || $has_csrf) {
+        file_put_contents($debug_file, "[$timestamp] Indicadores de interface web - MANUAL\n", FILE_APPEND);
+        return true; // MANUAL
+    }
+    
+    // Sem referer E sem csrf = cron/email = AUTOMÁTICO
+    file_put_contents($debug_file, "[$timestamp] Sem referer e sem CSRF - AUTOMÁTICO (cron/email)\n", FILE_APPEND);
+    return false; // AUTOMÁTICO
 }
 
 /**
