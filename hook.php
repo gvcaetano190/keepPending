@@ -234,75 +234,36 @@ function plugin_keeppending_item_update($item) {
 
 /**
  * Verifica se é uma mudança MANUAL de status (feita pelo usuário diretamente)
- * ou uma mudança automática (via resposta, email, workflow)
+ * ou uma mudança automática (via email/mailgate)
  * 
  * Mudanças MANUAIS: 
- * - Usuário vai em "Editar Ticket" e muda o status diretamente
- * - NÃO houve followup/resposta recente no ticket
+ * - Qualquer mudança que NÃO veio por email
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Respostas, emails, automações que alteram status
- * - Houve um followup adicionado nos últimos 30 segundos
+ * - Apenas respostas por email (MailCollector)
  * 
  * @param object $item Objeto Ticket
- * @return bool true se é mudança manual, false se é automática
+ * @return bool true se é mudança manual, false se é automática (email)
  */
 function plugin_keeppending_isManualStatusChange($item) {
-    global $DB;
-    
-    $ticket_id = $item->getID();
+    $input = $item->input;
     $debug_file = GLPI_LOG_DIR . '/keeppending.log';
     $timestamp = date('Y-m-d H:i:s');
     
-    // Calcular timestamp de 30 segundos atrás
-    $time_limit = date('Y-m-d H:i:s', strtotime('-30 seconds'));
-    
-    // NOVA LÓGICA: Verificar se houve um followup adicionado recentemente (últimos 30 segundos)
-    // Se houver, a mudança de status é consequência dessa interação = AUTOMÁTICA
-    try {
-        $recent_followup = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_itilfollowups',
-            'WHERE'  => [
-                'itemtype' => 'Ticket',
-                'items_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_followup->count() > 0) {
-            $followup = $recent_followup->current();
-            file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há followup recente = mudança automática
-        }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar followups: " . $e->getMessage() . "\n", FILE_APPEND);
+    // ÚNICA VERIFICAÇÃO: Se veio por email/mailgate, é AUTOMÁTICO
+    if (isset($input['_mailgate'])) {
+        file_put_contents($debug_file, "[$timestamp] Detectado: _mailgate - mudança via EMAIL = AUTOMÁTICO\n", FILE_APPEND);
+        return false; // AUTOMÁTICO
     }
     
-    // Verificar se há tarefa recente
-    try {
-        $recent_task = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_tickettasks',
-            'WHERE'  => [
-                'tickets_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_task->count() > 0) {
-            $task = $recent_task->current();
-            file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há tarefa recente = mudança automática
-        }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar tarefas: " . $e->getMessage() . "\n", FILE_APPEND);
+    if (isset($input['_from_email'])) {
+        file_put_contents($debug_file, "[$timestamp] Detectado: _from_email - mudança via EMAIL = AUTOMÁTICO\n", FILE_APPEND);
+        return false; // AUTOMÁTICO
     }
     
-    file_put_contents($debug_file, "[$timestamp] Nenhuma interação recente - mudança MANUAL\n", FILE_APPEND);
-    return true; // Sem interação recente = mudança manual
+    // Qualquer outra coisa é MANUAL
+    file_put_contents($debug_file, "[$timestamp] Sem flags de email - mudança MANUAL\n", FILE_APPEND);
+    return true; // MANUAL
 }
 
 /**
