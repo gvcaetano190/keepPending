@@ -357,10 +357,10 @@ function plugin_keeppending_isManualStatusChange($item) {
     }
     
     // =========================================================================
-    // FALLBACK: Se tem algum indicador de sessão válida, considerar manual
+    // FALLBACK: Se tem referer (qualquer) considerar manual
     // =========================================================================
-    if (Session::getLoginUserID()) {
-        file_put_contents($debug_file, "[$timestamp] Usuário logado - MANUAL\n", FILE_APPEND);
+    if ($has_referer) {
+        file_put_contents($debug_file, "[$timestamp] Tem referer - MANUAL\n", FILE_APPEND);
         return true; // MANUAL
     }
     
