@@ -66,19 +66,23 @@ function plugin_keeppending_pre_item_update($item) {
     $current_data = $result->current();
     $current_status = (int)$current_data['status'];
     
-    // Status de Pendente em GLPI = 4 (Waiting/Pendente)
+    // Status em GLPI
     // 1=Novo, 2=Em atendimento, 3=Planejado, 4=Pendente, 5=Solucionado, 6=Fechado
     $PENDING_STATUS = 4;
+    $SOLVED_STATUS = 5;
+    $ASSIGNED_STATUS = 2; // Em atendimento
     
     plugin_keeppending_debug_log("Status atual no banco: {$current_status}");
-    plugin_keeppending_debug_log("Status Pendente configurado: {$PENDING_STATUS}");
+    plugin_keeppending_debug_log("Status Pendente: {$PENDING_STATUS}, Solucionado: {$SOLVED_STATUS}");
     
     // Log do input recebido
     $input_status = isset($item->input['status']) ? $item->input['status'] : 'não definido';
     plugin_keeppending_debug_log("Status no input: {$input_status}");
     plugin_keeppending_debug_log("Campos no input: " . implode(', ', array_keys($item->input)));
     
-    // Se o ticket está atualmente em status "Pendente" (status = 4)
+    // ========================================================================
+    // REGRA 1: Ticket em PENDENTE - bloquear mudanças automáticas
+    // ========================================================================
     if ($current_status == $PENDING_STATUS) {
         plugin_keeppending_debug_log("✓ Ticket ESTÁ em Pendente");
         
@@ -112,8 +116,44 @@ function plugin_keeppending_pre_item_update($item) {
         } else {
             plugin_keeppending_debug_log("Status não está sendo alterado ou já é Pendente");
         }
+    }
+    // ========================================================================
+    // REGRA 2: Ticket em SOLUCIONADO - redirecionar para PENDENTE (não Em atendimento)
+    // ========================================================================
+    else if ($current_status == $SOLVED_STATUS) {
+        plugin_keeppending_debug_log("✓ Ticket ESTÁ em Solucionado");
+        
+        // Verificar se está tentando mudar para "Em atendimento" (2)
+        if (isset($item->input['status']) && $item->input['status'] == $ASSIGNED_STATUS) {
+            plugin_keeppending_debug_log("⚠ Tentativa de mudar de Solucionado para Em Atendimento");
+            
+            // Detectar se é uma mudança MANUAL ou AUTOMÁTICA
+            $is_manual = plugin_keeppending_isManualStatusChange($item);
+            plugin_keeppending_debug_log("É mudança manual? " . ($is_manual ? "SIM" : "NÃO"));
+            
+            if ($is_manual) {
+                // É uma mudança MANUAL - PERMITIR
+                plugin_keeppending_debug_log("✓ PERMITIDO - mudança manual");
+                return;
+            } else {
+                // É uma mudança AUTOMÁTICA - REDIRECIONAR para PENDENTE
+                plugin_keeppending_debug_log("→ REDIRECIONANDO para Pendente em vez de Em Atendimento");
+                $item->input['status'] = $PENDING_STATUS;
+                
+                // Registrar a ação no log do GLPI
+                Event::log(
+                    $ticket_id,
+                    'Ticket',
+                    4,
+                    'keeppending',
+                    "Resposta em ticket Solucionado - Redirecionado para PENDENTE: {$current_status} → {$ASSIGNED_STATUS} → {$PENDING_STATUS}"
+                );
+            }
+        } else {
+            plugin_keeppending_debug_log("Mudança de status diferente de Em Atendimento - ignorando");
+        }
     } else {
-        plugin_keeppending_debug_log("Ticket NÃO está em Pendente (status {$current_status}) - ignorando");
+        plugin_keeppending_debug_log("Ticket em status {$current_status} - não é Pendente nem Solucionado - ignorando");
     }
 }
 
