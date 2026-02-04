@@ -292,12 +292,12 @@ function plugin_keeppending_item_update($item) {
  * ou uma mudança automática (via resposta, email, workflow)
  * 
  * Mudanças MANUAIS: 
- * - Usuário vai em "Editar Ticket" e muda o status diretamente
- * - NÃO houve followup/resposta recente no ticket
+ * - Usuário na interface web (tem HTTP_REFERER ou CSRF token)
+ * - Mesmo que tenha adicionado followup recentemente
  * 
  * Mudanças AUTOMÁTICAS: 
- * - Respostas, emails, automações que alteram status
- * - Houve um followup adicionado nos últimos 30 segundos
+ * - Respostas por email (MailCollector) - sem HTTP_REFERER/CSRF
+ * - Cron jobs processando emails
  * 
  * @param object $item Objeto Ticket
  * @return bool true se é mudança manual, false se é automática
@@ -305,59 +305,67 @@ function plugin_keeppending_item_update($item) {
 function plugin_keeppending_isManualStatusChange($item) {
     global $DB;
     
+    $input = $item->input;
     $ticket_id = $item->getID();
     $debug_file = GLPI_LOG_DIR . '/keeppending.log';
     $timestamp = date('Y-m-d H:i:s');
     
-    // Calcular timestamp de 30 segundos atrás
-    $time_limit = date('Y-m-d H:i:s', strtotime('-30 seconds'));
-    
-    // NOVA LÓGICA: Verificar se houve um followup adicionado recentemente (últimos 30 segundos)
-    // Se houver, a mudança de status é consequência dessa interação = AUTOMÁTICA
-    try {
-        $recent_followup = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_itilfollowups',
-            'WHERE'  => [
-                'itemtype' => 'Ticket',
-                'items_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_followup->count() > 0) {
-            $followup = $recent_followup->current();
-            file_put_contents($debug_file, "[$timestamp] Followup recente encontrado (ID: {$followup['id']}, criado: {$followup['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há followup recente = mudança automática
-        }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar followups: " . $e->getMessage() . "\n", FILE_APPEND);
+    // =========================================================================
+    // PRIORIDADE 1: Verificar flags de email (mais confiável)
+    // =========================================================================
+    if (isset($input['_mailgate'])) {
+        file_put_contents($debug_file, "[$timestamp] Detectado: _mailgate - mudança via EMAIL/CRON\n", FILE_APPEND);
+        return false; // AUTOMÁTICO
     }
     
-    // Verificar se há tarefa recente
-    try {
-        $recent_task = $DB->request([
-            'SELECT' => ['id', 'date_creation'],
-            'FROM'   => 'glpi_tickettasks',
-            'WHERE'  => [
-                'tickets_id' => $ticket_id,
-                'date_creation' => ['>', $time_limit]
-            ],
-            'LIMIT'  => 1
-        ]);
-        
-        if ($recent_task->count() > 0) {
-            $task = $recent_task->current();
-            file_put_contents($debug_file, "[$timestamp] Tarefa recente encontrada (ID: {$task['id']}, criada: {$task['date_creation']}) - mudança AUTOMÁTICA\n", FILE_APPEND);
-            return false; // Há tarefa recente = mudança automática
-        }
-    } catch (Exception $e) {
-        file_put_contents($debug_file, "[$timestamp] ERRO ao buscar tarefas: " . $e->getMessage() . "\n", FILE_APPEND);
+    if (isset($input['_from_email'])) {
+        file_put_contents($debug_file, "[$timestamp] Detectado: _from_email - mudança via EMAIL\n", FILE_APPEND);
+        return false; // AUTOMÁTICO
     }
     
-    file_put_contents($debug_file, "[$timestamp] Nenhuma interação recente - mudança MANUAL\n", FILE_APPEND);
-    return true; // Sem interação recente = mudança manual
+    // =========================================================================
+    // PRIORIDADE 2: Verificar indicadores de interface web
+    // Se presente, é MANUAL (mesmo com followup recente)
+    // =========================================================================
+    $has_referer = isset($_SERVER['HTTP_REFERER']);
+    $referer = $has_referer ? $_SERVER['HTTP_REFERER'] : 'nenhum';
+    file_put_contents($debug_file, "[$timestamp] HTTP_REFERER: $referer\n", FILE_APPEND);
+    
+    // Se tem referer do formulário do ticket, é interface web = MANUAL
+    if ($has_referer && (strpos($referer, 'ticket.form.php') !== false || strpos($referer, 'front/ticket.php') !== false)) {
+        file_put_contents($debug_file, "[$timestamp] Referer de ticket.form.php - MANUAL (interface web)\n", FILE_APPEND);
+        return true; // MANUAL
+    }
+    
+    // Se tem CSRF token, é interface web = MANUAL
+    $has_csrf = isset($_POST['_glpi_csrf_token']) || isset($input['_glpi_csrf_token']);
+    file_put_contents($debug_file, "[$timestamp] Tem CSRF token? " . ($has_csrf ? 'SIM' : 'NÃO') . "\n", FILE_APPEND);
+    
+    if ($has_csrf) {
+        file_put_contents($debug_file, "[$timestamp] CSRF token presente - MANUAL (interface web)\n", FILE_APPEND);
+        return true; // MANUAL
+    }
+    
+    // =========================================================================
+    // PRIORIDADE 3: Sem indicadores de interface web - verificar contexto
+    // =========================================================================
+    
+    // Se não tem referer E não tem CSRF = provavelmente cron/email
+    if (!$has_referer && !$has_csrf) {
+        file_put_contents($debug_file, "[$timestamp] Sem REFERER e sem CSRF - AUTOMÁTICO (cron/email)\n", FILE_APPEND);
+        return false; // AUTOMÁTICO
+    }
+    
+    // =========================================================================
+    // FALLBACK: Se tem algum indicador de sessão válida, considerar manual
+    // =========================================================================
+    if (Session::getLoginUserID()) {
+        file_put_contents($debug_file, "[$timestamp] Usuário logado - MANUAL\n", FILE_APPEND);
+        return true; // MANUAL
+    }
+    
+    file_put_contents($debug_file, "[$timestamp] Fallback - considerando AUTOMÁTICO\n", FILE_APPEND);
+    return false; // AUTOMÁTICO
 }
 
 /**
