@@ -163,6 +163,20 @@ function plugin_keeppending_pre_item_update($item) {
             $is_manual = plugin_keeppending_isManualStatusChange($item);
             file_put_contents($debug_file, "[$timestamp] É mudança manual? " . ($is_manual ? 'SIM' : 'NÃO') . "\n", FILE_APPEND);
             
+            // Status FECHADO = 6 - Sempre permitir fechamento automático (cron após 24h)
+            $CLOSED_STATUS = 6;
+            
+            if ($new_status === $CLOSED_STATUS) {
+                // Mudança para FECHADO - SEMPRE PERMITIR (cron de fechamento automático)
+                file_put_contents($debug_file, "[$timestamp] ✓ PERMITIDO - fechamento automático do ticket\n", FILE_APPEND);
+                plugin_keeppending_log(
+                    $ticket_id,
+                    'Fechamento automático PERMITIDO',
+                    sprintf('Status alterado para Fechado: %d → %d (fechamento automático)', $current_status, $new_status)
+                );
+                return;
+            }
+            
             if ($is_manual) {
                 // É uma mudança MANUAL - PERMITIR (não faz nada)
                 file_put_contents($debug_file, "[$timestamp] ✓ PERMITIDO - mudança manual\n", FILE_APPEND);
