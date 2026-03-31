@@ -21,20 +21,24 @@
  */
 function plugin_keeppending_install() {
     global $DB;
-    
-    // Criar tabela de configuração do plugin
+
+    $default_charset   = class_exists('DBConnection') ? DBConnection::getDefaultCharset() : 'utf8mb4';
+    $default_collation = class_exists('DBConnection') ? DBConnection::getDefaultCollation() : 'utf8mb4_unicode_ci';
+    $default_key_sign  = class_exists('DBConnection') ? DBConnection::getDefaultPrimaryKeySignOption() : '';
+
+    // Criar tabela de configuração legada do plugin para manter compatibilidade
     if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
         $query = "CREATE TABLE `glpi_plugin_keeppending_config` (
-            `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `id` int {$default_key_sign} NOT NULL auto_increment,
             `enable_keep_pending` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status pendente',
             `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado',
             `enable_logs` tinyint(1) DEFAULT 1 COMMENT 'Habilitar logs',
-            `created_at` datetime DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        
-        $DB->query($query);
-        
-        // Inserir configurações padrão
+            `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET={$default_charset} COLLATE={$default_collation} ROW_FORMAT=DYNAMIC";
+
+        plugin_keeppending_executeQuery($query);
+
         if ($DB->tableExists('glpi_plugin_keeppending_config')) {
             $DB->insert('glpi_plugin_keeppending_config', [
                 'enable_keep_pending' => 1,
@@ -45,11 +49,20 @@ function plugin_keeppending_install() {
     } else {
         // Adicionar coluna enable_keep_solved se não existir (para upgrades)
         if (!$DB->fieldExists('glpi_plugin_keeppending_config', 'enable_keep_solved')) {
-            $DB->query("ALTER TABLE `glpi_plugin_keeppending_config` ADD `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado' AFTER `enable_keep_pending`");
+            plugin_keeppending_executeQuery("ALTER TABLE `glpi_plugin_keeppending_config` ADD `enable_keep_solved` tinyint(1) DEFAULT 1 COMMENT 'Habilitar manter status solucionado' AFTER `enable_keep_pending`");
             $DB->update('glpi_plugin_keeppending_config', ['enable_keep_solved' => 1], [1]);
         }
     }
-    
+
+    if (class_exists('PluginKeeppendingConfig')) {
+        PluginKeeppendingConfig::migrateLegacyConfig();
+    }
+
+    if (class_exists('Migration')) {
+        $migration = new Migration(PLUGIN_KEEPPENDING_VERSION);
+        $migration->executeMigration();
+    }
+
     return true;
 }
 
@@ -60,12 +73,12 @@ function plugin_keeppending_install() {
  */
 function plugin_keeppending_uninstall() {
     global $DB;
-    
-    // Remover tabela de configuração
+
+    // Remover tabela de configuração legada
     if ($DB->tableExists('glpi_plugin_keeppending_config')) {
-        $DB->query("DROP TABLE `glpi_plugin_keeppending_config`");
+        plugin_keeppending_executeQuery("DROP TABLE `glpi_plugin_keeppending_config`");
     }
-    
+
     return true;
 }
 
@@ -301,39 +314,27 @@ function plugin_keeppending_isManualStatusChange($item) {
  * @return array Lista de status IDs que devem ser protegidos
  */
 function plugin_keeppending_getProtectedStatuses() {
-    global $DB;
-    
     $protected = [];
-    
+
     // Status: WAITING=4 (Pendente), SOLVED=5 (Solucionado)
     $PENDING_STATUS = 4;
-    $SOLVED_STATUS = 5;
-    
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
-        // Padrão: proteger ambos
-        return [$PENDING_STATUS, $SOLVED_STATUS];
-    }
-    
-    $result = $DB->request([
-        'SELECT' => ['enable_keep_pending', 'enable_keep_solved'],
-        'FROM'   => 'glpi_plugin_keeppending_config',
-        'LIMIT'  => 1
-    ]);
-    
-    if (!$result->count()) {
-        return [$PENDING_STATUS, $SOLVED_STATUS];
-    }
-    
-    $config = $result->current();
-    
+    $SOLVED_STATUS  = 5;
+
+    $config = class_exists('PluginKeeppendingConfig')
+        ? PluginKeeppendingConfig::getConfig()
+        : [
+            'enable_keep_pending' => 1,
+            'enable_keep_solved'  => 1,
+        ];
+
     if ((bool) ($config['enable_keep_pending'] ?? true)) {
         $protected[] = $PENDING_STATUS;
     }
-    
+
     if ((bool) ($config['enable_keep_solved'] ?? true)) {
         $protected[] = $SOLVED_STATUS;
     }
-    
+
     return $protected;
 }
 
@@ -348,6 +349,22 @@ function plugin_keeppending_isEnabled() {
 }
 
 /**
+ * Executa SQL bruto usando o método disponível na versão atual do GLPI.
+ *
+ * @param string $query
+ * @return mixed
+ */
+function plugin_keeppending_executeQuery($query) {
+    global $DB;
+
+    if (method_exists($DB, 'doQuery')) {
+        return $DB->doQuery($query);
+    }
+
+    return $DB->query($query);
+}
+
+/**
  * Registra ações do plugin no banco de dados para auditoria
  * 
  * @param int $ticket_id ID do ticket
@@ -356,28 +373,14 @@ function plugin_keeppending_isEnabled() {
  * @return void
  */
 function plugin_keeppending_log($ticket_id, $action, $details = '') {
-    global $DB;
-    
-    // Verificar se logs estão habilitados
-    if (!$DB->tableExists('glpi_plugin_keeppending_config')) {
+    $config = class_exists('PluginKeeppendingConfig')
+        ? PluginKeeppendingConfig::getConfig()
+        : ['enable_logs' => 1];
+
+    if (!(bool) ($config['enable_logs'] ?? true)) {
         return;
     }
-    
-    $result = $DB->request([
-        'SELECT' => ['enable_logs'],
-        'FROM'   => 'glpi_plugin_keeppending_config',
-        'LIMIT'  => 1
-    ]);
-    
-    if (!$result->count()) {
-        return;
-    }
-    
-    $config = $result->current();
-    if (!(bool) $config['enable_logs']) {
-        return;
-    }
-    
+
     // Usar Toolbox::logInFile ao invés de Event::log (mais simples e compatível)
     $message = sprintf(
         'Ticket #%d - %s%s',

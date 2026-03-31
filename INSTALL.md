@@ -1,5 +1,7 @@
 # Instalação - KeepPending Plugin
 
+> Compatível com **GLPI 10.x** e **GLPI 11.x**.
+
 ## ⚡ Instalação Rápida (Um Comando)
 
 ```bash

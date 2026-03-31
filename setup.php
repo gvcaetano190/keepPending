@@ -10,11 +10,11 @@
  * @license     GPL v2 ou superior
  * @link        https://github.com/gvcaetano190/keepPending
  * @author      Gabriel Caetano
- * @version     1.0.0
+ * @version     1.1.0
  * ============================================================================
  */
 
-define('PLUGIN_KEEPPENDING_VERSION', '1.0.0');
+define('PLUGIN_KEEPPENDING_VERSION', '1.1.0');
 
 /**
  * Init the hooks of the plugins - Needed
@@ -29,6 +29,13 @@ function plugin_init_keeppending() {
     
     // Página de configuração do plugin
     $PLUGIN_HOOKS['config_page']['keeppending'] = 'front/config.form.php';
+
+    // Registrar classe de configuração para compatibilidade com GLPI 10 e 11
+    if (class_exists('Plugin')) {
+        Plugin::registerClass('PluginKeeppendingConfig', [
+            'addtabon' => ['Config']
+        ]);
+    }
     
     // Hook para interceptar atualização de tickets (PRE - antes de salvar)
     // IMPORTANTE: Deve ser um array com o tipo de item como chave
@@ -57,7 +64,7 @@ function plugin_version_keeppending() {
         'requirements'   => [
             'glpi' => [
                 'min' => '10.0.0',
-                'max' => '10.9.99',
+                'max' => '11.99.99',
             ],
             'php' => [
                 'min' => '8.0',
@@ -72,11 +79,17 @@ function plugin_version_keeppending() {
  * @return boolean
  */
 function plugin_keeppending_check_prerequisites() {
-    // Verificar versão mínima do GLPI
+    // Verificar faixa suportada do GLPI
     if (version_compare(GLPI_VERSION, '10.0.0', 'lt')) {
         echo "Este plugin requer GLPI >= 10.0.0";
         return false;
     }
+
+    if (version_compare(GLPI_VERSION, '12.0.0', 'ge')) {
+        echo "Este plugin é compatível com GLPI 10.x e 11.x";
+        return false;
+    }
+
     return true;
 }
 

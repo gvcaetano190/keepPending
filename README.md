@@ -2,9 +2,9 @@
 
 Plugin para GLPI que **mantém o status "Pendente" em chamados** quando respostas são adicionadas automaticamente.
 
-[![GLPI Version](https://img.shields.io/badge/GLPI-10.0.0--10.9.x-blue.svg)](https://glpi-project.org/)
+[![GLPI Version](https://img.shields.io/badge/GLPI-10.x--11.x-blue.svg)](https://glpi-project.org/)
 [![License](https://img.shields.io/badge/License-GPLv2+-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.1.0-orange.svg)](CHANGELOG.md)
 
 ---
 
@@ -80,7 +80,7 @@ keeppending/
 ├── front/
 │   └── config.form.php # Página de configuração
 ├── inc/
-│   └── Config.class.php
+│   └── config.class.php
 ├── locales/
 │   ├── en_GB.po
 │   └── pt_BR.po
@@ -94,7 +94,7 @@ keeppending/
 
 ## 🔧 Requisitos
 
-- **GLPI**: 10.0.0 a 10.9.x
+- **GLPI**: 10.0.0 até 11.x
 - **PHP**: 8.0+
 - **Banco**: MySQL/MariaDB
 
