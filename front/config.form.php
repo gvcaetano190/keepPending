@@ -13,6 +13,9 @@ if (!defined('GLPI_ROOT')) {
     include('../../../inc/includes.php');
 }
 
+global $CFG_GLPI;
+$root_doc = is_array($CFG_GLPI ?? null) ? ($CFG_GLPI['root_doc'] ?? '') : '';
+
 Session::checkRight('config', READ);
 
 if (isset($_POST['update'])) {
@@ -29,4 +32,4 @@ if (isset($_POST['update'])) {
 }
 
 Session::setActiveTab('Config', 'PluginKeeppendingConfig$1');
-Html::redirect($CFG_GLPI['root_doc'] . '/front/config.form.php');
+Html::redirect($root_doc . '/front/config.form.php');

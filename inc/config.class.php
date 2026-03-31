@@ -168,8 +168,9 @@ class PluginKeeppendingConfig extends CommonDBTM {
     public static function showConfigForm($item) {
         global $CFG_GLPI;
 
-        $config = self::getConfig();
-        $action = $CFG_GLPI['root_doc'] . '/plugins/keeppending/front/config.form.php';
+        $config   = self::getConfig();
+        $root_doc = is_array($CFG_GLPI ?? null) ? ($CFG_GLPI['root_doc'] ?? '') : '';
+        $action   = $root_doc . '/plugins/keeppending/front/config.form.php';
 
         echo "<form name='form' action=\"" . self::escape($action) . "\" method='post' data-track-changes='true'>";
         echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);

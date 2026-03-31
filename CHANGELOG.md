@@ -6,6 +6,15 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.1.1] - 2026-03-31
+
+### 🐛 Correção
+
+- Corrigido aviso em `front/config.form.php` ao abrir a configuração do plugin no servidor
+- Tratamento seguro para `$CFG_GLPI['root_doc']` quando o arquivo é carregado pelo `LegacyFileLoadController`
+
+---
+
 ## [1.1.0] - 2026-03-31
 
 ### ✨ Melhorias

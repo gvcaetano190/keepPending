@@ -10,11 +10,11 @@
  * @license     GPL v2 ou superior
  * @link        https://github.com/gvcaetano190/keepPending
  * @author      Gabriel Caetano
- * @version     1.1.0
+ * @version     1.1.1
  * ============================================================================
  */
 
-define('PLUGIN_KEEPPENDING_VERSION', '1.1.0');
+define('PLUGIN_KEEPPENDING_VERSION', '1.1.1');
 
 /**
  * Init the hooks of the plugins - Needed

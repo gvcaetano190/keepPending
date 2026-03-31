@@ -4,7 +4,7 @@ Plugin para GLPI que **mantém o status "Pendente" em chamados** quando resposta
 
 [![GLPI Version](https://img.shields.io/badge/GLPI-10.x--11.x-blue.svg)](https://glpi-project.org/)
 [![License](https://img.shields.io/badge/License-GPLv2+-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.1.1-orange.svg)](CHANGELOG.md)
 
 ---
 
